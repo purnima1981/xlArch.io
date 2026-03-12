@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XlArch — The Intelligent Architecture Platform</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:#fff;color:#111;min-height:100vh}
+nav{display:flex;align-items:center;padding:20px 48px;max-width:1200px;margin:0 auto}
+nav img{height:36px}
+nav .sp{flex:1}
+nav a{text-decoration:none;font-size:14px;font-weight:500;color:#666;padding:8px 20px}
+nav a:hover{color:#111}
+nav .cta{background:#111;color:#fff;border-radius:8px;padding:9px 22px;margin-left:8px}
+nav .cta:hover{opacity:0.85}
+.hero{max-width:800px;margin:0 auto;padding:120px 40px 80px;text-align:center}
+.hero h1{font-size:56px;font-weight:700;line-height:1.1;letter-spacing:-2.5px;margin-bottom:24px}
+.hero p{font-size:18px;color:#666;max-width:580px;margin:0 auto 48px;line-height:1.7}
+.btns{display:flex;gap:12px;justify-content:center}
+.btns a{text-decoration:none;padding:14px 36px;border-radius:10px;font-size:16px;font-weight:600;display:inline-block}
+.btns .p{background:#111;color:#fff}
+.btns .p:hover{opacity:0.85}
+.btns .s{background:#fff;color:#111;border:1.5px solid #e0e0e0}
+.btns .s:hover{border-color:#111}
+.features{max-width:900px;margin:0 auto;padding:0 40px}
+.features-inner{border-top:1px solid #f0f0f0;padding-top:48px;display:flex;gap:48px}
+.features-inner div{flex:1}
+.features-inner h3{font-size:15px;font-weight:700;margin-bottom:8px}
+.features-inner p{font-size:14px;color:#888;line-height:1.6}
+footer{text-align:center;padding:100px 40px 32px;font-size:13px;color:#ccc}
+@media(max-width:768px){
+  nav{padding:16px 20px}
+  .hero{padding:60px 20px 40px}
+  .hero h1{font-size:36px}
+  .features-inner{flex-direction:column;gap:24px}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <img src="/static/logo.svg" alt="XlArch">
+  <div class="sp"></div>
+  <a href="/login">Log in</a>
+  <a href="/signup" class="cta">Try It Free →</a>
+</nav>
+
+<div class="hero">
+  <h1>The intelligent<br>architecture platform</h1>
+  <p>Design, validate, and export system architectures with AI. Security, compliance, and best practices — built in from the start.</p>
+  <div class="btns">
+    <a href="/signup" class="p">Try It Free →</a>
+    <a href="#features" class="s">Learn More</a>
+  </div>
+</div>
+
+<div class="features" id="features">
+  <div class="features-inner">
+    <div>
+      <h3>AI-Powered Design</h3>
+      <p>Describe your system in plain English. XlArch generates production-ready architecture with proper service selection and data flow.</p>
+    </div>
+    <div>
+      <h3>Omni-Channel Render</h3>
+      <p>One definition renders everywhere — interactive canvas, editable slides, images, and version-controlled code. Always in sync.</p>
+    </div>
+    <div>
+      <h3>Built-In Governance</h3>
+      <p>Every diagram is validated against industry best practices. Security, encryption, compliance, and operational excellence from day one.</p>
+    </div>
+  </div>
+</div>
+
+<footer>© 2026 XlArch.io</footer>
+
+</body>
+</html>
