@@ -94,90 +94,77 @@ IDENTITY_SECRETS = {
 
 
 # ═══════════════════════════════════════════════════════════
-#  2. ON-PREM TO GCP CONNECTIVITY
-#  DC → Interconnect → Shared VPC → Workloads
+#  2. ON-PREM TO GCP — How On-Prem Tools Connect to GCP
 # ═══════════════════════════════════════════════════════════
 
 ONPREM_TO_GCP = {
     "title": "On-Prem to GCP Connectivity",
     "layout": "pipeline",
-    "zones": ["on_prem", "connectivity", "network_hub", "shared_services", "workload_vpc", "gcp_services"],
-    "lanes": ["primary", "management", "dns_routing"],
+    "zones": ["on_prem", "how", "gcp"],
+    "lanes": ["identity", "secrets", "database", "compute", "messaging", "monitoring"],
     "nodes": [
-        # On-Prem
-        {"id": "dc_primary",      "icon": "client",          "label": "Data Center",          "zone": "on_prem",        "lane": "primary",       "step": 1},
-        {"id": "dc_ad",           "icon": "users",           "label": "AD / LDAP",            "zone": "on_prem",        "lane": "management"},
-        {"id": "dc_dns",          "icon": "dns",             "label": "On-Prem DNS",          "zone": "on_prem",        "lane": "dns_routing"},
+        # Identity
+        {"id": "ad",              "icon": "users",          "label": "Active Directory",     "zone": "on_prem", "lane": "identity",   "step": 1},
+        {"id": "gcds",            "icon": "iam",            "label": "GCDS Sync",            "zone": "how",     "lane": "identity",   "step": 2},
+        {"id": "cloud_iam",       "icon": "iam",            "label": "Cloud IAM",            "zone": "gcp",     "lane": "identity",   "step": 3},
 
-        # Connectivity
-        {"id": "interconnect_1",  "icon": "vpn",             "label": "Interconnect (Primary)", "zone": "connectivity", "lane": "primary",       "step": 2},
-        {"id": "interconnect_2",  "icon": "vpn",             "label": "Interconnect (Backup)",  "zone": "connectivity", "lane": "primary"},
-        {"id": "cloud_vpn",       "icon": "vpn",             "label": "HA Cloud VPN",         "zone": "connectivity",   "lane": "management",    "step": 2},
-        {"id": "cloud_router",    "icon": "dns",             "label": "Cloud Router (BGP)",   "zone": "connectivity",   "lane": "dns_routing",   "step": 3},
+        # Secrets
+        {"id": "cyberark",        "icon": "kms",            "label": "CyberArk Vault",       "zone": "on_prem", "lane": "secrets",    "step": 1},
+        {"id": "vault_api",       "icon": "vpn",            "label": "CCP API / Sync",       "zone": "how",     "lane": "secrets",    "step": 2},
+        {"id": "secret_mgr",      "icon": "kms",            "label": "Secret Manager",       "zone": "gcp",     "lane": "secrets",    "step": 3},
 
-        # Network Hub (Shared VPC Host)
-        {"id": "shared_vpc",      "icon": "firewall",        "label": "Shared VPC Host",      "zone": "network_hub",    "lane": "primary",       "step": 4},
-        {"id": "fw_policies",     "icon": "firewall",        "label": "Firewall Policies",    "zone": "network_hub",    "lane": "management"},
-        {"id": "cloud_dns_hub",   "icon": "dns",             "label": "Cloud DNS (Hub)",      "zone": "network_hub",    "lane": "dns_routing",   "step": 4},
+        # Database
+        {"id": "oracle",          "icon": "oracle",         "label": "Oracle DB",            "zone": "on_prem", "lane": "database",   "step": 1},
+        {"id": "interconnect",    "icon": "vpn",            "label": "Interconnect / DMS",   "zone": "how",     "lane": "database",   "step": 2},
+        {"id": "bigquery",        "icon": "bigquery",       "label": "BigQuery",             "zone": "gcp",     "lane": "database",   "step": 3},
 
-        # Shared Services
-        {"id": "nat_gateway",     "icon": "dns",             "label": "Cloud NAT",            "zone": "shared_services","lane": "primary"},
-        {"id": "int_lb",          "icon": "load_balancing",  "label": "Internal LB",          "zone": "shared_services","lane": "management",    "step": 5},
-        {"id": "dns_peering",     "icon": "dns",             "label": "DNS Peering",          "zone": "shared_services","lane": "dns_routing"},
+        # Compute
+        {"id": "vmware",          "icon": "compute_engine", "label": "VMware / VMs",         "zone": "on_prem", "lane": "compute",    "step": 1},
+        {"id": "ha_vpn",          "icon": "vpn",            "label": "HA Cloud VPN",         "zone": "how",     "lane": "compute",    "step": 2},
+        {"id": "gke",             "icon": "gke",            "label": "GKE",                  "zone": "gcp",     "lane": "compute",    "step": 3},
 
-        # Workload VPCs (Service Projects)
-        {"id": "prod_subnet",     "icon": "firewall",        "label": "Prod Subnet",          "zone": "workload_vpc",   "lane": "primary",       "step": 6},
-        {"id": "dev_subnet",      "icon": "firewall",        "label": "Dev Subnet",           "zone": "workload_vpc",   "lane": "management"},
-        {"id": "psc_endpoint",    "icon": "dns",             "label": "PSC Endpoints",        "zone": "workload_vpc",   "lane": "dns_routing",   "step": 6},
+        # Messaging
+        {"id": "kafka",           "icon": "kafka",          "label": "Kafka",                "zone": "on_prem", "lane": "messaging",  "step": 1},
+        {"id": "kafka_connect",   "icon": "vpn",            "label": "Kafka Connect",        "zone": "how",     "lane": "messaging",  "step": 2},
+        {"id": "pubsub",          "icon": "pubsub",         "label": "Pub/Sub",              "zone": "gcp",     "lane": "messaging",  "step": 3},
 
-        # GCP Services
-        {"id": "gke_workload",    "icon": "gke",             "label": "GKE Cluster",          "zone": "gcp_services",   "lane": "primary",       "step": 7},
-        {"id": "cloud_run_wl",    "icon": "cloud_run",       "label": "Cloud Run",            "zone": "gcp_services",   "lane": "management"},
-        {"id": "bq_psc",          "icon": "bigquery",        "label": "BigQuery (PSC)",       "zone": "gcp_services",   "lane": "dns_routing",   "step": 7},
+        # Monitoring
+        {"id": "splunk",          "icon": "monitoring",     "label": "Splunk",               "zone": "on_prem", "lane": "monitoring", "step": 1},
+        {"id": "log_api",         "icon": "vpn",            "label": "Log Export API",       "zone": "how",     "lane": "monitoring", "step": 2},
+        {"id": "cloud_mon",       "icon": "monitoring",     "label": "Cloud Monitoring",     "zone": "gcp",     "lane": "monitoring", "step": 3},
     ],
     "edges": [
-        # Primary path
-        {"from": "dc_primary",     "to": "interconnect_1"},
-        {"from": "dc_primary",     "to": "interconnect_2"},
-        {"from": "interconnect_1", "to": "shared_vpc"},
-        {"from": "interconnect_2", "to": "shared_vpc"},
-        {"from": "shared_vpc",     "to": "nat_gateway"},
-        {"from": "shared_vpc",     "to": "prod_subnet"},
-        {"from": "prod_subnet",    "to": "gke_workload"},
-
-        # Management
-        {"from": "dc_ad",          "to": "cloud_vpn"},
-        {"from": "cloud_vpn",      "to": "fw_policies"},
-        {"from": "fw_policies",    "to": "int_lb"},
-        {"from": "int_lb",         "to": "dev_subnet"},
-        {"from": "dev_subnet",     "to": "cloud_run_wl"},
-
-        # DNS routing
-        {"from": "dc_dns",         "to": "cloud_router"},
-        {"from": "cloud_router",   "to": "cloud_dns_hub"},
-        {"from": "cloud_dns_hub",  "to": "dns_peering"},
-        {"from": "dns_peering",    "to": "psc_endpoint"},
-        {"from": "psc_endpoint",   "to": "bq_psc"},
+        {"from": "ad",         "to": "gcds"},
+        {"from": "gcds",       "to": "cloud_iam"},
+        {"from": "cyberark",   "to": "vault_api"},
+        {"from": "vault_api",  "to": "secret_mgr"},
+        {"from": "oracle",     "to": "interconnect"},
+        {"from": "interconnect","to": "bigquery"},
+        {"from": "vmware",     "to": "ha_vpn"},
+        {"from": "ha_vpn",     "to": "gke"},
+        {"from": "kafka",      "to": "kafka_connect"},
+        {"from": "kafka_connect","to": "pubsub"},
+        {"from": "splunk",     "to": "log_api"},
+        {"from": "log_api",    "to": "cloud_mon"},
     ],
     "governance": [
         {"icon": "iam",          "label": "IAM"},
         {"icon": "kms",          "label": "KMS / CMEK"},
         {"icon": "monitoring",   "label": "Monitoring"},
-        {"icon": "logging",      "label": "VPC Flow Logs"},
-        {"icon": "firewall",     "label": "Firewall Rules"},
+        {"icon": "logging",      "label": "Audit Logs"},
+        {"icon": "firewall",     "label": "VPC-SC"},
         {"icon": "dns",          "label": "Private DNS"},
     ],
     "bestPractices": [
-        {"category": "NETWORK",     "tip": "Dual Interconnect attachments in different edge locations for 99.99% SLA"},
-        {"category": "NETWORK",     "tip": "Shared VPC: centralized network in host project, workloads in service projects"},
-        {"category": "NETWORK",     "tip": "Cloud Router with BGP for dynamic route advertisement — no static routes"},
-        {"category": "NETWORK",     "tip": "Private Service Connect for all Google API access — no public endpoints"},
-        {"category": "SECURITY",    "tip": "Hierarchical firewall policies at org/folder level — deny-all default"},
-        {"category": "SECURITY",    "tip": "Cloud NAT only where egress needed — most workloads should be private-only"},
-        {"category": "RELIABILITY", "tip": "HA Cloud VPN as backup path when Interconnect is in maintenance"},
-        {"category": "RELIABILITY", "tip": "DNS peering between on-prem and cloud for seamless name resolution"},
-        {"category": "COST",        "tip": "10 Gbps Interconnect vs multiple VPN tunnels — break-even at ~5 TB/month"},
-        {"category": "COMPLIANCE",  "tip": "VPC Flow Logs on all subnets — export to BigQuery for network forensics"},
+        {"category": "IDENTITY",    "tip": "GCDS syncs AD groups to Cloud Identity — never manage users in GCP directly"},
+        {"category": "SECRETS",     "tip": "CyberArk CCP API syncs credentials to Secret Manager — keys never exported"},
+        {"category": "NETWORK",     "tip": "Dedicated Interconnect for database replication (Oracle → BigQuery via DMS)"},
+        {"category": "NETWORK",     "tip": "HA Cloud VPN as backup or for smaller sites"},
+        {"category": "NETWORK",     "tip": "Private Service Connect — BigQuery, GCS, Cloud SQL accessed privately"},
+        {"category": "DATA",        "tip": "Database Migration Service for continuous Oracle → Cloud SQL replication"},
+        {"category": "MESSAGING",   "tip": "Kafka Connect with Pub/Sub sink connector — mirror topics to GCP"},
+        {"category": "SECURITY",    "tip": "VPC-SC perimeter around all GCP projects — blast radius containment"},
+        {"category": "COMPLIANCE",  "tip": "Cloud Logging exported back to Splunk for unified SIEM"},
     ],
 }
 
@@ -543,4 +530,124 @@ TEMPLATES = {
         "description": "Streaming + batch pipeline, medallion storage, ML, dashboards",
         "data": DATA_ANALYTICS,
     },
+}
+
+
+# ═══════════════════════════════════════════════════════════
+#  HEALTHCARE DIAGNOSTICS — Unified Agentic Platform
+# ═══════════════════════════════════════════════════════════
+
+DIAGNOSTICS_AGENTIC = {
+    "title": "Diagnostics Agentic Platform",
+    "layout": "layered",
+    "zones": ["input", "orchestrate", "process", "connect", "store", "govern"],
+    "lanes": ["experience", "control", "agents", "protocols", "intelligence", "data"],
+    "nodes": [
+        # ── EXPERIENCE: Who uses it
+        {"id": "physician_portal",  "icon": "users",       "label": "Physician Portal",  "zone": "input",       "lane": "experience", "step": 1},
+        {"id": "patient_portal",    "icon": "client",      "label": "Patient Portal",    "zone": "orchestrate", "lane": "experience", "step": 2},
+        {"id": "lab_dashboard",     "icon": "monitoring",   "label": "Lab Tech UI",       "zone": "process",     "lane": "experience", "step": 3},
+
+        # ── CONTROL: Master Agent + Guardrails
+        {"id": "master_agent",      "icon": "iam",         "label": "Master Agent",      "zone": "orchestrate", "lane": "control",    "step": 4},
+        {"id": "guardrails",        "icon": "firewall",    "label": "Guardrails",        "zone": "connect",     "lane": "control",    "step": 5},
+
+        # ── AGENTS: Specialists
+        {"id": "test_agent",        "icon": "monitoring",  "label": "Test Agent",        "zone": "input",       "lane": "agents"},
+        {"id": "specimen_agent",    "icon": "gcs",         "label": "Specimen Agent",    "zone": "orchestrate", "lane": "agents"},
+        {"id": "results_agent",     "icon": "bigquery",    "label": "Results Agent",     "zone": "process",     "lane": "agents"},
+        {"id": "ai_companion",      "icon": "vertex_ai",   "label": "AI Companion",      "zone": "connect",     "lane": "agents"},
+        {"id": "billing_agent",     "icon": "generic_db",  "label": "Billing Agent",     "zone": "store",       "lane": "agents"},
+        {"id": "compliance_agent",  "icon": "kms",         "label": "Compliance Agent",  "zone": "govern",      "lane": "agents"},
+
+        # ── PROTOCOLS: How agents talk
+        {"id": "mcp_lis",           "icon": "pubsub",      "label": "MCP (LIS/EHR)",     "zone": "input",       "lane": "protocols"},
+        {"id": "a2a",               "icon": "dataflow",    "label": "A2A Protocol",      "zone": "process",     "lane": "protocols"},
+        {"id": "fhir_hl7",          "icon": "dns",         "label": "FHIR / HL7",        "zone": "store",       "lane": "protocols"},
+
+        # ── INTELLIGENCE: Brains
+        {"id": "llm_gateway",       "icon": "cloud_run",   "label": "LLM Gateway",       "zone": "input",       "lane": "intelligence"},
+        {"id": "test_compendium",   "icon": "bigtable",    "label": "Test Compendium",   "zone": "orchestrate", "lane": "intelligence"},
+        {"id": "rag_pipeline",      "icon": "dataflow",    "label": "RAG Pipeline",      "zone": "process",     "lane": "intelligence"},
+        {"id": "vector_db",         "icon": "spanner",     "label": "Vector DB",         "zone": "connect",     "lane": "intelligence"},
+
+        # ── DATA: Sources
+        {"id": "lis",               "icon": "database",    "label": "LIS",               "zone": "input",       "lane": "data"},
+        {"id": "ehr_epic",          "icon": "client",      "label": "EHR / EPIC",        "zone": "orchestrate", "lane": "data"},
+        {"id": "bq",               "icon": "bigquery",    "label": "BigQuery",          "zone": "process",     "lane": "data"},
+        {"id": "gcs_store",        "icon": "gcs",         "label": "GCS",               "zone": "connect",     "lane": "data"},
+        {"id": "salesforce",        "icon": "client",      "label": "Salesforce",        "zone": "store",       "lane": "data"},
+        {"id": "sharepoint",        "icon": "client",      "label": "SharePoint",        "zone": "govern",      "lane": "data"},
+    ],
+    "edges": [
+        # Experience → Master Agent
+        {"from": "physician_portal", "to": "master_agent"},
+        {"from": "patient_portal",   "to": "master_agent"},
+        {"from": "lab_dashboard",    "to": "master_agent"},
+
+        # Master Agent → Guardrails → Agents
+        {"from": "master_agent",     "to": "guardrails"},
+        {"from": "guardrails",       "to": "test_agent"},
+        {"from": "guardrails",       "to": "specimen_agent"},
+        {"from": "guardrails",       "to": "results_agent"},
+        {"from": "guardrails",       "to": "ai_companion"},
+        {"from": "guardrails",       "to": "billing_agent"},
+        {"from": "guardrails",       "to": "compliance_agent"},
+
+        # Agent-to-Agent via A2A
+        {"from": "test_agent",       "to": "a2a"},
+        {"from": "specimen_agent",   "to": "a2a"},
+        {"from": "results_agent",    "to": "a2a"},
+        {"from": "billing_agent",    "to": "a2a"},
+
+        # Agents → MCP (external systems)
+        {"from": "test_agent",       "to": "mcp_lis"},
+        {"from": "specimen_agent",   "to": "mcp_lis"},
+        {"from": "results_agent",    "to": "fhir_hl7"},
+        {"from": "billing_agent",    "to": "fhir_hl7"},
+
+        # Agents → Intelligence
+        {"from": "ai_companion",     "to": "llm_gateway"},
+        {"from": "test_agent",       "to": "test_compendium"},
+        {"from": "results_agent",    "to": "rag_pipeline"},
+        {"from": "compliance_agent", "to": "rag_pipeline"},
+        {"from": "rag_pipeline",     "to": "vector_db"},
+        {"from": "llm_gateway",      "to": "rag_pipeline"},
+
+        # MCP / Protocols → Data
+        {"from": "mcp_lis",          "to": "lis"},
+        {"from": "mcp_lis",          "to": "ehr_epic"},
+        {"from": "fhir_hl7",        "to": "ehr_epic"},
+        {"from": "fhir_hl7",        "to": "salesforce"},
+
+        # Intelligence → Data
+        {"from": "test_compendium",  "to": "bq"},
+        {"from": "vector_db",        "to": "gcs_store"},
+        {"from": "rag_pipeline",     "to": "bq"},
+    ],
+    "governance": [
+        {"icon": "iam",          "label": "IAM"},
+        {"icon": "kms",          "label": "HIPAA / CLIA"},
+        {"icon": "monitoring",   "label": "Monitoring"},
+        {"icon": "logging",      "label": "Audit Trail"},
+        {"icon": "firewall",     "label": "PHI Encrypt"},
+        {"icon": "dns",          "label": "VPC-SC"},
+    ],
+    "bestPractices": [
+        {"category": "SECURITY",    "tip": "All PHI encrypted at rest (CMEK) and in transit (mTLS)"},
+        {"category": "COMPLIANCE",  "tip": "Every agent decision logged to immutable audit trail"},
+        {"category": "COMPLIANCE",  "tip": "HIPAA BAA in place for all cloud services processing PHI"},
+        {"category": "COMPLIANCE",  "tip": "CLIA/CAP compliance checks automated via Compliance Agent"},
+        {"category": "GUARDRAILS",  "tip": "PHI/PII detection on all inputs and outputs"},
+        {"category": "GUARDRAILS",  "tip": "Critical lab values trigger mandatory human-in-the-loop"},
+        {"category": "RELIABILITY", "tip": "Master Agent escalates to human when confidence < threshold"},
+        {"category": "RELIABILITY", "tip": "A2A protocol ensures agent handoffs are tracked end-to-end"},
+    ],
+}
+
+# Update TEMPLATES index
+TEMPLATES["diagnostics_agentic"] = {
+    "name": "Diagnostics Agentic Platform",
+    "description": "Healthcare diagnostics — Master Agent, Guardrails, Specialist Agents, MCP, A2A",
+    "data": DIAGNOSTICS_AGENTIC,
 }

@@ -96,7 +96,20 @@ LP = 70      # left pad
 TP = 90      # top pad
 GOV_OFF = 15 # governance offset below last lane
 ARROW_COLOR = "#9E9E9E"
-LANE_COLORS = {"streaming": "#E8F4FD", "batch": "#EDF7ED", "ml": "#FFF3E0"}
+LANE_COLORS = {"streaming": "#E8F4FD", "batch": "#EDF7ED", "ml": "#FFF3E0", "governance": "#F3E8FD",
+    "user_identity": "#E8F4FD", "service_identity": "#EDF7ED", "secrets": "#FFF3E0",
+    "primary": "#E8F4FD", "management": "#EDF7ED", "dns_routing": "#FFF3E0",
+    "networking": "#E8F4FD", "identity": "#F3E8FD", "data_path": "#EDF7ED",
+    "ingress": "#E8F4FD", "internal": "#EDF7ED", "egress": "#FFF3E0",
+    "preventive": "#E8F4FD", "detective": "#EDF7ED", "corrective": "#FFF3E0",
+}
+
+
+def get_lane_gap(num_lanes):
+    """Adaptive lane gap: fewer lanes = more space, many lanes = compact."""
+    if num_lanes <= 4:
+        return LG
+    return max(100, LG - (num_lanes - 4) * 15)
 
 
 def compute_layout(architecture):
@@ -104,8 +117,13 @@ def compute_layout(architecture):
     lanes = architecture.get("lanes", DEFAULT_LANES)
     nodes = architecture.get("nodes", [])
 
-    zone_x = {z: LP + i * ZG for i, z in enumerate(zones)}
-    lane_y = {l: TP + i * LG for i, l in enumerate(lanes)}
+    # Adaptive gaps: fill available space
+    # Target ~1100px wide canvas
+    zone_gap = max(ZG, int(1000 / max(len(zones), 1)))
+    lane_gap = LG if len(lanes) <= 4 else max(100, LG - (len(lanes) - 4) * 15)
+
+    zone_x = {z: LP + i * zone_gap for i, z in enumerate(zones)}
+    lane_y = {l: TP + i * lane_gap for i, l in enumerate(lanes)}
 
     cells = {}
     for n in nodes:
@@ -122,13 +140,15 @@ def compute_layout(architecture):
             "x": zone_x.get(z, LP) + idx * (NW + 30),
             "y": lane_y.get(l, TP),
         }
-    return positions
+    return positions, zone_gap, lane_gap
 
 
 def canvas_bounds(architecture):
     zones = architecture.get("zones", DEFAULT_ZONES)
     lanes = architecture.get("lanes", DEFAULT_LANES)
-    return LP + len(zones) * ZG + 60, TP + len(lanes) * LG + GOV_OFF + 130
+    zone_gap = max(ZG, int(1000 / max(len(zones), 1)))
+    lane_gap = LG if len(lanes) <= 4 else max(100, LG - (len(lanes) - 4) * 15)
+    return LP + len(zones) * zone_gap + 60, TP + len(lanes) * lane_gap + GOV_OFF + 130
 
 
 def new_architecture(title="Untitled"):
