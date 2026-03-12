@@ -32,6 +32,7 @@ def render(architecture):
     if gov:
         if "security" not in lanes:
             lanes.append("security")
+        # Spread gov nodes evenly — one per zone. If more gov than zones, wrap around
         for i, g in enumerate(gov):
             gid = f"gov_{g.get('icon', i)}"
             zone_idx = min(i, len(zones) - 1) if zones else 0
@@ -51,7 +52,9 @@ def render(architecture):
     positions, zone_gap, lane_gap = compute_layout(arch)
     title = arch.get("title", "")
 
-    cw = LP + len(zones) * zone_gap + 60
+    # Canvas size from actual node positions (handles overflow)
+    max_x = max((p["x"] for p in positions.values()), default=0) + NW + 60
+    cw = max(LP + len(zones) * zone_gap + 60, max_x)
     ch = TP + len(lanes) * lane_gap + 60
 
     # ── Title
@@ -61,13 +64,21 @@ def render(architecture):
     # ── Lane backgrounds + lane labels
     for i, lane in enumerate(lanes):
         ly = TP + i * lane_gap - 20
-        lw = len(zones) * zone_gap + 40
         lh = NH + 58
+        
+        # Calculate lane width from actual node positions
+        lane_nodes = [n for n in nodes if n.get("lane") == lane]
+        if lane_nodes:
+            max_x = max(positions.get(n["id"], {}).get("x", 0) for n in lane_nodes)
+            lw = max(len(zones) * zone_gap + 40, max_x + NW + 40 - 25)
+        else:
+            lw = len(zones) * zone_gap + 40
+        
         fill = LANE_COLORS.get(lane, "#F5F5F5")
         commands.append({"type": "rect", "x": 25, "y": ly, "w": lw, "h": lh,
                         "fill": fill, "stroke": "#E8E8E8", "stroke_width": 0.3, "radius": 10, "opacity": 0.35})
 
-        # Lane label (vertical left side)
+        # Lane label
         label = lane.upper().replace("_", " ")
         commands.append({"type": "text", "x": 30, "y": ly + lh / 2 - 5, "w": 60,
                         "text": label, "size": 6, "color": "#BDBDBD", "bold": True, "align": "left"})
