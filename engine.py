@@ -119,7 +119,7 @@ def compute_layout(architecture):
         siblings = cells.get(key, [n["id"]])
         idx = siblings.index(n["id"]) if n["id"] in siblings else 0
         positions[n["id"]] = {
-            "x": zone_x.get(z, LP) + idx * (NW + 15),
+            "x": zone_x.get(z, LP) + idx * (NW + 30),
             "y": lane_y.get(l, TP),
         }
     return positions
@@ -259,14 +259,25 @@ def render_pptx(architecture, output_path):
             p2.font.color.rgb = RGBColor(255,255,255); p2.font.bold = True
             p2.alignment = PP_ALIGN.CENTER
 
-    # Edges
+    # Edges — orthogonal routing
     for e in architecture.get("edges", []):
         fp, tp = positions.get(e["from"]), positions.get(e["to"])
         if not fp or not tp: continue
-        conn = slide.shapes.add_connector(1,
-            Inches(sx(fp["x"]+NW)), Inches(sy(fp["y"]+NH/2)),
-            Inches(sx(tp["x"])), Inches(sy(tp["y"]+NH/2)))
-        conn.line.color.rgb = rgb(ARROW_COLOR); conn.line.width = Pt(0.75)
+        x1, y1 = fp["x"]+NW, fp["y"]+NH/2
+        x2, y2 = tp["x"], tp["y"]+NH/2
+
+        if abs(y1 - y2) < 5:
+            # Same lane — straight
+            conn = slide.shapes.add_connector(1,
+                Inches(sx(x1)), Inches(sy(y1)), Inches(sx(x2)), Inches(sy(y2)))
+            conn.line.color.rgb = rgb(ARROW_COLOR); conn.line.width = Pt(0.75)
+        else:
+            # Cross-lane — draw 3 segments (H, V, H)
+            midX = (x1 + x2) / 2
+            for (ax, ay, bx, by) in [(x1,y1,midX,y1), (midX,y1,midX,y2), (midX,y2,x2,y2)]:
+                c = slide.shapes.add_connector(1,
+                    Inches(sx(ax)), Inches(sy(ay)), Inches(sx(bx)), Inches(sy(by)))
+                c.line.color.rgb = rgb(ARROW_COLOR); c.line.width = Pt(0.75)
 
     # Governance bar
     gov = architecture.get("governance", [])
