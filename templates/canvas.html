@@ -471,17 +471,21 @@ function hitTestNode(mx, my) {
 cv.addEventListener("mousedown", e => {
   const [mx, my] = toCanvas(e.clientX, e.clientY);
 
-  // 1. Check handles first — start connection drag
-  const handle = hitTestHandle(mx, my);
-  if (handle) {
-    connecting = {fromId: handle.id, fromX: handle.x, fromY: handle.y};
-    connectMouse = {x: mx, y: my};
-    cv.style.cursor = "crosshair";
-    return;
+  // 1. Check if inside a node body first — always drag/select
+  const nodeId = hitTestNode(mx, my);
+
+  // 2. Only check handles if NOT inside a node body (handles are outside edges)
+  if (!nodeId) {
+    const handle = hitTestHandle(mx, my);
+    if (handle) {
+      connecting = {fromId: handle.id, fromX: handle.x, fromY: handle.y};
+      connectMouse = {x: mx, y: my};
+      cv.style.cursor = "crosshair";
+      return;
+    }
   }
 
-  // 2. Node body — drag
-  const nodeId = hitTestNode(mx, my);
+  // 3. Node body — drag + select
   if (nodeId) {
     dragging = nodeId;
     selectedNode = nodeId;
@@ -493,7 +497,7 @@ cv.addEventListener("mousedown", e => {
     return;
   }
 
-  // 3. Edge
+  // 4. Edge
   const edgeIdx = hitTestEdge(mx, my);
   if (edgeIdx !== null) {
     selectedEdge = edgeIdx;
@@ -502,7 +506,7 @@ cv.addEventListener("mousedown", e => {
     return;
   }
 
-  // 4. Background
+  // 5. Background
   selectedNode = null;
   selectedEdge = null;
   draw();
