@@ -87,21 +87,27 @@ CATALOG = {
 DEFAULT_ZONES = ["sources", "ingest", "process", "store", "analyze", "serve"]
 DEFAULT_LANES = ["streaming", "batch", "ml"]
 
-NW = 120     # node width
-NH = 82      # node height
-IS = 42      # icon size
-ZG = 175     # zone gap
-LG = 145     # lane gap
-LP = 70      # left pad
+NW = 130     # node width (wider for labels)
+NH = 90      # node height
+IS = 40      # icon size
+ZG = 190     # zone gap (more breathing room)
+LG = 150     # lane gap
+LP = 80      # left pad (room for lane labels)
 TP = 90      # top pad
 GOV_OFF = 15 # governance offset below last lane
-ARROW_COLOR = "#9E9E9E"
-LANE_COLORS = {"streaming": "#E8F4FD", "batch": "#EDF7ED", "ml": "#FFF3E0", "governance": "#F3E8FD",
+ARROW_COLOR = "#BDBDBD"
+LANE_COLORS = {
+    "streaming": "#E8F4FD", "batch": "#EDF7ED", "ml": "#FFF3E0",
+    "security": "#F5F5F5",
     "user_identity": "#E8F4FD", "service_identity": "#EDF7ED", "secrets": "#FFF3E0",
     "primary": "#E8F4FD", "management": "#EDF7ED", "dns_routing": "#FFF3E0",
-    "networking": "#E8F4FD", "identity": "#F3E8FD", "data_path": "#EDF7ED",
+    "networking": "#E8F4FD", "identity": "#E8F0FE", "data_path": "#EDF7ED",
     "ingress": "#E8F4FD", "internal": "#EDF7ED", "egress": "#FFF3E0",
     "preventive": "#E8F4FD", "detective": "#EDF7ED", "corrective": "#FFF3E0",
+    "experience": "#E8F4FD", "control": "#EDF7ED", "agents": "#FFF3E0",
+    "protocols": "#E8F4FD", "intelligence": "#EDF7ED", "data": "#FFF3E0",
+    "database": "#E8F4FD", "compute": "#EDF7ED", "messaging": "#FFF3E0",
+    "monitoring": "#F5F5F5", "governance": "#F5F5F5",
 }
 
 

@@ -21,7 +21,7 @@ def render(architecture):
     """Render architecture to a list of draw commands. Canvas + PPTX both consume this."""
     commands = []
 
-    # ── Inject governance as real nodes in a "governance" lane
+    # Merge governance into regular nodes — no special box, just another lane
     arch = dict(architecture)
     gov = arch.get("governance", [])
     zones = list(arch.get("zones", []))
@@ -29,21 +29,19 @@ def render(architecture):
     nodes = list(arch.get("nodes", []))
     edges = list(arch.get("edges", []))
 
-    if gov and "governance" not in lanes:
-        lanes.append("governance")
-    
-    for i, g in enumerate(gov):
-        gid = f"gov_{g.get('icon', i)}"
-        # Spread governance nodes across zones
-        zone_idx = min(i, len(zones) - 1) if zones else 0
-        zone = zones[zone_idx] if zones else "sources"
-        nodes.append({
-            "id": gid,
-            "icon": g.get("icon", ""),
-            "label": g.get("label", ""),
-            "zone": zone,
-            "lane": "governance",
-        })
+    if gov:
+        if "security" not in lanes:
+            lanes.append("security")
+        for i, g in enumerate(gov):
+            gid = f"gov_{g.get('icon', i)}"
+            zone_idx = min(i, len(zones) - 1) if zones else 0
+            nodes.append({
+                "id": gid,
+                "icon": g.get("icon", ""),
+                "label": g.get("label", ""),
+                "zone": zones[zone_idx] if zones else "sources",
+                "lane": "security",
+            })
 
     arch["zones"] = zones
     arch["lanes"] = lanes
@@ -60,19 +58,25 @@ def render(architecture):
     commands.append({"type": "text", "x": LP, "y": 15, "w": cw, "text": title,
                      "size": 14, "color": "#202124", "bold": True, "align": "left"})
 
-    # ── Lane backgrounds
+    # ── Lane backgrounds + lane labels
     for i, lane in enumerate(lanes):
-        ly = TP + i * lane_gap - 18
+        ly = TP + i * lane_gap - 20
         lw = len(zones) * zone_gap + 40
-        lh = NH + 50
+        lh = NH + 58
         fill = LANE_COLORS.get(lane, "#F5F5F5")
         commands.append({"type": "rect", "x": 25, "y": ly, "w": lw, "h": lh,
-                        "fill": fill, "stroke": None, "stroke_width": 0, "radius": 8, "opacity": 0.3})
+                        "fill": fill, "stroke": "#E8E8E8", "stroke_width": 0.3, "radius": 10, "opacity": 0.35})
+
+        # Lane label (vertical left side)
+        label = lane.upper().replace("_", " ")
+        commands.append({"type": "text", "x": 30, "y": ly + lh / 2 - 5, "w": 60,
+                        "text": label, "size": 6, "color": "#BDBDBD", "bold": True, "align": "left"})
 
     # ── Zone labels
     for i, z in enumerate(zones):
-        commands.append({"type": "text", "x": LP + i * zone_gap + 20, "y": 50, "w": NW,
-                        "text": z.upper(), "size": 7, "color": "#BDBDBD", "bold": True, "align": "left"})
+        label = z.upper().replace("_", " ")
+        commands.append({"type": "text", "x": LP + i * zone_gap, "y": 50, "w": NW + 20,
+                        "text": label, "size": 7, "color": "#9E9E9E", "bold": True, "align": "center"})
 
     # ── Edges (orthogonal)
     for e in edges:
@@ -104,30 +108,30 @@ def render(architecture):
 
         # Card background
         commands.append({"type": "rect", "x": x, "y": y, "w": NW, "h": NH,
-                        "fill": "#FFFFFF", "stroke": "#E0E4E8", "stroke_width": 0.5,
+                        "fill": "#FFFFFF", "stroke": "#E0E4E8", "stroke_width": 1,
                         "radius": 10, "shadow": True, "nodeId": nid})
 
-        # Icon
-        commands.append({"type": "image", "x": x + (NW - IS) / 2, "y": y + 5,
+        # Icon (centered in card)
+        commands.append({"type": "image", "x": x + (NW - IS) / 2, "y": y + 10,
                         "w": IS, "h": IS, "src": n.get("icon", ""), "nodeId": nid})
 
-        # Label
-        commands.append({"type": "text", "x": x, "y": y + NH - 14, "w": NW,
-                        "text": n.get("label", ""), "size": 9, "color": "#3C4043",
+        # Label (inside card, below icon)
+        label = n.get("label", "")
+        if len(label) > 16:
+            label = label[:14] + "…"
+        commands.append({"type": "text", "x": x, "y": y + NH - 18, "w": NW,
+                        "text": label, "size": 8, "color": "#3C4043",
                         "bold": False, "align": "center", "nodeId": nid})
 
         # Step badge
         if "step" in n:
-            bx, by, bsz = x + NW - 14, y - 6, 20
+            bx, by, bsz = x + NW - 12, y - 6, 18
             commands.append({"type": "rect", "x": bx, "y": by, "w": bsz, "h": 16,
                             "fill": "#4285F4", "stroke": None, "stroke_width": 0,
-                            "radius": 4, "nodeId": nid})
+                            "radius": 8, "nodeId": nid})
             commands.append({"type": "text", "x": bx, "y": by + 1, "w": bsz,
-                            "text": str(n["step"]), "size": 9, "color": "#FFFFFF",
+                            "text": str(n["step"]), "size": 8, "color": "#FFFFFF",
                             "bold": True, "align": "center", "nodeId": nid})
-
-    # Governance items are now regular nodes in "governance" lane
-    # They render as cards with the same style — draggable, selectable, deletable
 
     return {"commands": commands, "width": cw, "height": ch, "positions": positions}
 
