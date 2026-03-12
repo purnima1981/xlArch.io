@@ -95,7 +95,7 @@ def render(architecture):
             points = [(x1, y1), (midX, y1), (midX, y2), (x2, y2)]
 
         commands.append({"type": "arrow", "points": points,
-                        "color": ARROW_COLOR, "width": 1,
+                        "color": ARROW_COLOR, "width": 2,
                         "fromId": e["from"], "toId": e["to"]})
 
     # ── Nodes
@@ -111,16 +111,17 @@ def render(architecture):
                         "fill": "#FFFFFF", "stroke": "#E0E4E8", "stroke_width": 1,
                         "radius": 10, "shadow": True, "nodeId": nid})
 
-        # Icon (centered in card)
-        commands.append({"type": "image", "x": x + (NW - IS) / 2, "y": y + 10,
-                        "w": IS, "h": IS, "src": n.get("icon", ""), "nodeId": nid})
+        # Icon (bigger, centered)
+        icon_size = 54
+        commands.append({"type": "image", "x": x + (NW - icon_size) / 2, "y": y + 6,
+                        "w": icon_size, "h": icon_size, "src": n.get("icon", ""), "nodeId": nid})
 
-        # Label (inside card, below icon)
+        # Label
         label = n.get("label", "")
-        if len(label) > 16:
-            label = label[:14] + "…"
-        commands.append({"type": "text", "x": x, "y": y + NH - 18, "w": NW,
-                        "text": label, "size": 8, "color": "#3C4043",
+        if len(label) > 18:
+            label = label[:16] + "…"
+        commands.append({"type": "text", "x": x, "y": y + NH - 16, "w": NW,
+                        "text": label, "size": 9, "color": "#3C4043",
                         "bold": False, "align": "center", "nodeId": nid})
 
         # Step badge
@@ -141,9 +142,9 @@ def render(architecture):
 # ═══════════════════════════════════════════
 
 def commands_to_pptx(render_result, output_path):
-    """Translate draw commands to python-pptx shapes."""
+    """Translate draw commands to python-pptx shapes, grouped by nodeId."""
     from pptx import Presentation
-    from pptx.util import Inches, Pt
+    from pptx.util import Inches, Pt, Emu
     from pptx.dml.color import RGBColor
     from pptx.enum.text import PP_ALIGN
     from pptx.enum.shapes import MSO_SHAPE
@@ -151,7 +152,6 @@ def commands_to_pptx(render_result, output_path):
     commands = render_result["commands"]
     cw, ch = render_result["width"], render_result["height"]
 
-    # Scale to fit slide
     SLIDE_W, SLIDE_H = 13.3, 7.5
     margin = 0.35
     scale = min((SLIDE_W - 2 * margin) / cw, (SLIDE_H - 2 * margin) / ch)
@@ -169,8 +169,13 @@ def commands_to_pptx(render_result, output_path):
     prs.slide_height = Inches(SLIDE_H)
     slide = prs.slides.add_slide(prs.slide_layouts[6])
 
-    for cmd in commands:
+    # Collect shapes per nodeId for grouping
+    node_shapes = {}  # nodeId → [shape, ...]
+
+    def add_shape_for_cmd(cmd):
+        """Create a shape and return it."""
         t = cmd["type"]
+        shape = None
 
         if t == "rect":
             shape = slide.shapes.add_shape(
@@ -191,17 +196,17 @@ def commands_to_pptx(render_result, output_path):
             ipath = get_icon_path(cmd["src"])
             if ipath:
                 try:
-                    slide.shapes.add_picture(ipath,
+                    shape = slide.shapes.add_picture(ipath,
                         Inches(sx(cmd["x"])), Inches(sy(cmd["y"])),
                         Inches(sw(cmd["w"])), Inches(sw(cmd["h"])))
                 except:
                     pass
 
         elif t == "text":
-            tx = slide.shapes.add_textbox(
+            shape = slide.shapes.add_textbox(
                 Inches(sx(cmd["x"])), Inches(sy(cmd["y"])),
                 Inches(sw(cmd["w"])), Inches(0.25))
-            tf = tx.text_frame
+            tf = shape.text_frame
             tf.word_wrap = True
             p = tf.paragraphs[0]
             p.text = cmd["text"]
@@ -214,8 +219,7 @@ def commands_to_pptx(render_result, output_path):
         elif t == "arrow":
             pts = cmd["points"]
             color = rgb(cmd.get("color", "#9E9E9E"))
-            width = Pt(cmd.get("width", 0.75))
-            # Draw each segment
+            width = Pt(cmd.get("width", 2))
             for j in range(len(pts) - 1):
                 x1, y1 = pts[j]
                 x2, y2 = pts[j + 1]
@@ -224,6 +228,23 @@ def commands_to_pptx(render_result, output_path):
                     Inches(sx(x2)), Inches(sy(y2)))
                 conn.line.color.rgb = color
                 conn.line.width = width
+
+        return shape
+
+    # First pass: create all shapes
+    for cmd in commands:
+        shape = add_shape_for_cmd(cmd)
+        nid = cmd.get("nodeId")
+        if nid and shape:
+            node_shapes.setdefault(nid, []).append(shape)
+
+    # Second pass: group shapes by nodeId
+    for nid, shapes in node_shapes.items():
+        if len(shapes) >= 2:
+            try:
+                group = slide.shapes.add_group_shape(shapes)
+            except:
+                pass  # grouping may fail on some shape combos, shapes stay ungrouped
 
     prs.save(output_path)
     return output_path
