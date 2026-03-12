@@ -188,8 +188,7 @@ let zoom = 1, panX = 0, panY = 0;
 let dragging = null, dragOff = {x:0, y:0};
 let isPanning = false, panStart = {x:0, y:0};
 let selectedNode = null;
-let snapLines = []; // active snap guides
-let hoveredNode = null; // node id when hovering near edges
+let snapLines = [];
 const imgCache = {};
 
 const cv = document.getElementById("cv");
@@ -347,17 +346,22 @@ function draw() {
     }
   });
 
-  // ── Hover dots (show connection points on hovered node)
-  const dotNode = hoveredNode || selectedNode;
-  if (dotNode && pos[dotNode]) {
-    const d = getDelta(dotNode);
-    const px = pos[dotNode].x + d.dx, py = pos[dotNode].y + d.dy;
-    // Left dot (input)
+  // ── Draw.io-style blue handle arrows on hovered node
+  if (hoveredNode && pos[hoveredNode]) {
+    const d = getDelta(hoveredNode);
+    const px = pos[hoveredNode].x + d.dx, py = pos[hoveredNode].y + d.dy;
+    const cx = px + NW/2, cy = py + NH/2;
+    const sz = 6; // triangle size
     ctx.fillStyle = "#4285F4";
-    ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(px, py + NH/2, 5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-    // Right dot (output)
-    ctx.beginPath(); ctx.arc(px + NW, py + NH/2, 5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+
+    // Right arrow
+    ctx.beginPath(); ctx.moveTo(px+NW+2, cy-sz); ctx.lineTo(px+NW+sz+4, cy); ctx.lineTo(px+NW+2, cy+sz); ctx.closePath(); ctx.fill();
+    // Left arrow
+    ctx.beginPath(); ctx.moveTo(px-2, cy-sz); ctx.lineTo(px-sz-4, cy); ctx.lineTo(px-2, cy+sz); ctx.closePath(); ctx.fill();
+    // Bottom arrow
+    ctx.beginPath(); ctx.moveTo(cx-sz, py+NH+2); ctx.lineTo(cx, py+NH+sz+4); ctx.lineTo(cx+sz, py+NH+2); ctx.closePath(); ctx.fill();
+    // Top arrow
+    ctx.beginPath(); ctx.moveTo(cx-sz, py-2); ctx.lineTo(cx, py-sz-4); ctx.lineTo(cx+sz, py-2); ctx.closePath(); ctx.fill();
   }
 
   ctx.restore();
@@ -401,18 +405,17 @@ function drawSnapLines() {
 // ═══════════════════════════════════════
 //  INTERACTION — drag nodes + draw edges
 // ═══════════════════════════════════════
-let connecting = null; // {fromId, startX, startY}
-let connectMouse = null; // {x, y} while drawing edge
-let selectedEdge = null; // index into arch.edges
+let connecting = null; // {fromId, fromX, fromY} when dragging a connection
+let connectMouse = null;
+let selectedEdge = null;
+let hoveredNode = null;
 
-// Distance from point to line segment
 function distToSegment(px, py, x1, y1, x2, y2) {
-  const dx = x2 - x1, dy = y2 - y1;
-  const len2 = dx * dx + dy * dy;
-  if (len2 === 0) return Math.hypot(px - x1, py - y1);
-  let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+  const dx = x2-x1, dy = y2-y1, len2 = dx*dx+dy*dy;
+  if (len2 === 0) return Math.hypot(px-x1, py-y1);
+  let t = ((px-x1)*dx + (py-y1)*dy) / len2;
   t = Math.max(0, Math.min(1, t));
-  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+  return Math.hypot(px-(x1+t*dx), py-(y1+t*dy));
 }
 
 function hitTestEdge(mx, my) {
@@ -421,39 +424,33 @@ function hitTestEdge(mx, my) {
     const e = arch.edges[i];
     const fp = pos[e.from], tp = pos[e.to];
     if (!fp || !tp) continue;
-    const fd = dragDeltas[e.from] || {dx:0, dy:0};
-    const td = dragDeltas[e.to] || {dx:0, dy:0};
-    const x1 = fp.x + fd.dx + NW + 5, y1 = fp.y + fd.dy + NH / 2;
-    const x2 = tp.x + td.dx - 5, y2 = tp.y + td.dy + NH / 2;
-
-    if (Math.abs(y1 - y2) < 5) {
-      // Straight line
-      if (distToSegment(mx, my, x1, y1, x2, y2) < 6) return i;
-    } else {
-      // L-shape — check all 3 segments
-      const midX = (x1 + x2) / 2;
-      if (distToSegment(mx, my, x1, y1, midX, y1) < 6) return i;
-      if (distToSegment(mx, my, midX, y1, midX, y2) < 6) return i;
-      if (distToSegment(mx, my, midX, y2, x2, y2) < 6) return i;
-    }
+    const fd = dragDeltas[e.from] || {dx:0,dy:0};
+    const td = dragDeltas[e.to] || {dx:0,dy:0};
+    const x1=fp.x+fd.dx+NW+5, y1=fp.y+fd.dy+NH/2;
+    const x2=tp.x+td.dx-5, y2=tp.y+td.dy+NH/2;
+    if (Math.abs(y1-y2)<5) { if (distToSegment(mx,my,x1,y1,x2,y2)<6) return i; }
+    else { const midX=(x1+x2)/2; if (distToSegment(mx,my,x1,y1,midX,y1)<6||distToSegment(mx,my,midX,y1,midX,y2)<6||distToSegment(mx,my,midX,y2,x2,y2)<6) return i; }
   }
   return null;
 }
 
-function hitTestDot(mx, my) {
+// Hit test: is mouse over one of the 4 edge handles?
+function hitTestHandle(mx, my) {
   if (!arch || !arch.nodes) return null;
   for (let i = arch.nodes.length - 1; i >= 0; i--) {
     const n = arch.nodes[i];
-    const p = pos[n.id];
-    if (!p) continue;
+    const p = pos[n.id]; if (!p) continue;
     const d = dragDeltas[n.id] || {dx:0, dy:0};
     const px = p.x + d.dx, py = p.y + d.dy;
-    // Right side (output) — wider hit area
-    const rx = px + NW, ry = py + NH/2;
-    if (Math.hypot(mx - rx, my - ry) < 15) return {id: n.id, side: "out", x: rx, y: ry};
-    // Left side (input)
-    const lx = px, ly = py + NH/2;
-    if (Math.hypot(mx - lx, my - ly) < 15) return {id: n.id, side: "in", x: lx, y: ly};
+    const cx = px + NW/2, cy = py + NH/2;
+    // Right
+    if (Math.abs(mx - (px+NW)) < 10 && Math.abs(my - cy) < 12) return {id: n.id, x: px+NW, y: cy, side: "right"};
+    // Left
+    if (Math.abs(mx - px) < 10 && Math.abs(my - cy) < 12) return {id: n.id, x: px, y: cy, side: "left"};
+    // Bottom
+    if (Math.abs(mx - cx) < 12 && Math.abs(my - (py+NH)) < 10) return {id: n.id, x: cx, y: py+NH, side: "bottom"};
+    // Top
+    if (Math.abs(mx - cx) < 12 && Math.abs(my - py) < 10) return {id: n.id, x: cx, y: py, side: "top"};
   }
   return null;
 }
@@ -462,8 +459,7 @@ function hitTestNode(mx, my) {
   if (!arch || !arch.nodes) return null;
   for (let i = arch.nodes.length - 1; i >= 0; i--) {
     const n = arch.nodes[i];
-    const p = pos[n.id];
-    if (!p) continue;
+    const p = pos[n.id]; if (!p) continue;
     const d = dragDeltas[n.id] || {dx:0, dy:0};
     const px = p.x + d.dx, py = p.y + d.dy;
     if (mx >= px && mx <= px + NW && my >= py && my <= py + NH) return n.id;
@@ -474,16 +470,16 @@ function hitTestNode(mx, my) {
 cv.addEventListener("mousedown", e => {
   const [mx, my] = toCanvas(e.clientX, e.clientY);
 
-  // 1. Check connection dots first
-  const dot = hitTestDot(mx, my);
-  if (dot && dot.side === "out") {
-    connecting = {fromId: dot.id, startX: dot.x, startY: dot.y};
+  // 1. Check handles first — start connection drag
+  const handle = hitTestHandle(mx, my);
+  if (handle) {
+    connecting = {fromId: handle.id, fromX: handle.x, fromY: handle.y};
     connectMouse = {x: mx, y: my};
     cv.style.cursor = "crosshair";
     return;
   }
 
-  // 2. Check node body for dragging
+  // 2. Node body — drag
   const nodeId = hitTestNode(mx, my);
   if (nodeId) {
     dragging = nodeId;
@@ -496,7 +492,7 @@ cv.addEventListener("mousedown", e => {
     return;
   }
 
-  // 3. Check if clicked on an edge
+  // 3. Edge
   const edgeIdx = hitTestEdge(mx, my);
   if (edgeIdx !== null) {
     selectedEdge = edgeIdx;
@@ -505,7 +501,7 @@ cv.addEventListener("mousedown", e => {
     return;
   }
 
-  // 4. Background — deselect + pan
+  // 4. Background
   selectedNode = null;
   selectedEdge = null;
   draw();
@@ -517,28 +513,20 @@ cv.addEventListener("mousedown", e => {
 cv.addEventListener("mousemove", e => {
   const [mx, my] = toCanvas(e.clientX, e.clientY);
 
+  // Dragging a connection line
   if (connecting) {
     connectMouse = {x: mx, y: my};
     draw();
-    // Draw in-progress edge — orthogonal
+    // Draw connection preview line
     ctx.save();
     ctx.translate(panX * zoom, panY * zoom);
     ctx.scale(zoom, zoom);
-    const sx = connecting.startX, sy = connecting.startY;
     ctx.strokeStyle = "#4285F4";
     ctx.lineWidth = 1.5;
-    ctx.setLineDash([6, 4]);
+    ctx.setLineDash([5, 3]);
     ctx.beginPath();
-    if (Math.abs(sy - my) < 10) {
-      ctx.moveTo(sx, sy);
-      ctx.lineTo(mx, my);
-    } else {
-      const midX = (sx + mx) / 2;
-      ctx.moveTo(sx, sy);
-      ctx.lineTo(midX, sy);
-      ctx.lineTo(midX, my);
-      ctx.lineTo(mx, my);
-    }
+    ctx.moveTo(connecting.fromX, connecting.fromY);
+    ctx.lineTo(mx, my);
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.restore();
@@ -585,39 +573,33 @@ cv.addEventListener("mousemove", e => {
     panStart = {x: e.clientX, y: e.clientY};
     draw();
   } else {
-    // Hover: change cursor + track hovered node for dots
-    const dot = hitTestDot(mx, my);
-    if (dot) { cv.style.cursor = "crosshair"; hoveredNode = dot.id; draw(); }
-    else {
-      const oldHover = hoveredNode;
-      hoveredNode = hitTestNode(mx, my);
-      if (hitTestEdge(mx, my) !== null) { cv.style.cursor = "pointer"; }
-      else if (hoveredNode) { cv.style.cursor = "grab"; }
-      else { cv.style.cursor = "default"; }
-      if (oldHover !== hoveredNode) draw();
-    }
+    const oldHover = hoveredNode;
+    const handle = hitTestHandle(mx, my);
+    if (handle) { cv.style.cursor = "crosshair"; hoveredNode = handle.id; }
+    else if (hitTestNode(mx, my)) { cv.style.cursor = "grab"; hoveredNode = hitTestNode(mx, my); }
+    else if (hitTestEdge(mx, my) !== null) { cv.style.cursor = "pointer"; hoveredNode = null; }
+    else { cv.style.cursor = "default"; hoveredNode = null; }
+    if (oldHover !== hoveredNode) draw();
   }
 });
 
 cv.addEventListener("mouseup", e => {
   if (connecting) {
     const [mx, my] = toCanvas(e.clientX, e.clientY);
-    // Check if released on a node (input dot or body)
-    const dot = hitTestDot(mx, my);
-    const targetId = dot ? dot.id : hitTestNode(mx, my);
-
+    const targetId = hitTestNode(mx, my);
     if (targetId && targetId !== connecting.fromId) {
-      // Check duplicate
-      const exists = arch.edges.some(ed => ed.from === connecting.fromId && ed.to === targetId);
-      if (!exists) {
+      if (!arch.edges.some(ed => ed.from === connecting.fromId && ed.to === targetId)) {
         arch.edges.push({from: connecting.fromId, to: targetId});
+        fetch("/api/rerender", {method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({architecture: arch})
+        }).then(r => r.json()).then(data => {
+          if (data.architecture) { arch = data.architecture; pos = arch.positions || pos; }
+          if (data.renderCommands) { renderCommands = data.renderCommands; }
+          draw();
+        });
       }
     }
-    connecting = null;
-    connectMouse = null;
-    cv.style.cursor = "default";
-    draw();
-    return;
+    connecting = null; connectMouse = null;
   }
   dragging = null;
   isPanning = false;
@@ -633,8 +615,14 @@ cv.addEventListener("mouseleave", () => {
   draw();
 });
 
-// Delete selected node or edge
+// Delete selected node or edge, Escape to cancel
 document.addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    connecting = null; connectMouse = null; selectedNode = null; selectedEdge = null;
+    cv.style.cursor = "default";
+    draw();
+    return;
+  }
   if ((e.key === "Delete" || e.key === "Backspace") && arch) {
     if (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT") return;
 
