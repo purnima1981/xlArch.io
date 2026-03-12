@@ -138,7 +138,7 @@ const cv = document.getElementById("cv");
 const ctx = cv.getContext("2d");
 let W, H;
 
-const NW = 130, NH = 88, IS = 48;
+const NW = 120, NH = 82, IS = 42, ZG = 175, LG = 145, LP = 70, TP = 90, GOV_OFF = 50;
 
 // ═══════════════════════════════════════
 //  RESIZE
@@ -208,19 +208,19 @@ function draw() {
   const zones = arch.zones || [];
   const lanes = arch.lanes || [];
   const style = arch.style || {};
-  const zg = style.zone_gap || 180;
-  const lg = style.lane_gap || 160;
-  const lc = style.lane_colors || {};
+  const zg = ZG;
+  const lg = LG;
+  const lc = {"streaming": "#E8F4FD", "batch": "#EDF7ED", "ml": "#FFF3E0"};
 
   // Lane backgrounds
   lanes.forEach((lane, i) => {
-    const y = 80 + i * lg - 25;
+    const y = TP + i * lg - 18;
     ctx.fillStyle = lc[lane] || "#f5f5f5";
     ctx.globalAlpha = 0.3;
     if (ctx.roundRect) {
-      ctx.beginPath(); ctx.roundRect(20, y, zones.length * zg + 80, NH + 70, 8); ctx.fill();
+      ctx.beginPath(); ctx.roundRect(25, y, zones.length * zg + 40, NH + 50, 8); ctx.fill();
     } else {
-      ctx.fillRect(20, y, zones.length * zg + 80, NH + 70);
+      ctx.fillRect(25, y, zones.length * zg + 40, NH + 50);
     }
     ctx.globalAlpha = 1;
   });
@@ -229,7 +229,7 @@ function draw() {
   ctx.font = "600 9px system-ui";
   ctx.fillStyle = "#bbb";
   zones.forEach((z, i) => {
-    ctx.fillText(z.toUpperCase(), 60 + i * zg + 20, 45);
+    ctx.fillText(z.toUpperCase(), LP + i * zg + 20, 55);
   });
 
   // Edges (bezier)
@@ -305,6 +305,46 @@ function draw() {
     ctx.beginPath(); ctx.arc(p.x, p.y + NH/2, 4, 0, Math.PI*2); ctx.fill(); ctx.stroke();
     ctx.beginPath(); ctx.arc(p.x + NW, p.y + NH/2, 4, 0, Math.PI*2); ctx.fill(); ctx.stroke();
   });
+
+  // Governance bar
+  if (arch.governance && arch.governance.length > 0) {
+    const gy = TP + lanes.length * lg + GOV_OFF;
+    const bw = zones.length * zg + 40;
+    
+    // Purple dashed box
+    ctx.fillStyle = "#F3E8FD";
+    ctx.globalAlpha = 0.3;
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(25, gy - 8, bw, 75, 6); ctx.fill(); }
+    else ctx.fillRect(25, gy - 8, bw, 75);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = "#A142F4";
+    ctx.lineWidth = 0.5;
+    ctx.setLineDash([6, 3]);
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(25, gy - 8, bw, 75, 6); ctx.stroke(); }
+    ctx.setLineDash([]);
+
+    // Label
+    ctx.font = "700 8px system-ui";
+    ctx.fillStyle = "#8430CE";
+    ctx.fillText("GOVERNANCE & SECURITY", 35, gy + 6);
+
+    // Icons
+    const gis = 28;
+    const spacing = bw / (arch.governance.length + 1);
+    arch.governance.forEach((g, i) => {
+      const gx = 40 + (i + 0.5) * spacing;
+      preloadIcon(g.icon);
+      const img = imgCache[g.icon];
+      if (img && img.complete && img.naturalWidth > 0) {
+        ctx.drawImage(img, gx, gy + 15, gis, gis);
+      }
+      ctx.font = "500 8px system-ui";
+      ctx.fillStyle = "#666";
+      ctx.textAlign = "center";
+      ctx.fillText(g.label || "", gx + gis/2, gy + 15 + gis + 10);
+      ctx.textAlign = "start";
+    });
+  }
 
   ctx.restore();
 }

@@ -1,42 +1,19 @@
 """
-XlArch Engine — Architecture definition, layout, icon loading.
-One Python dict → canvas, PPTX, PNG.
+XlArch Engine — One architecture dict → canvas, PPTX, PNG.
+All renderers share the same coordinate system.
 """
 
-import os, base64, io, json
+import os, base64, io, json, subprocess, tempfile
 from pathlib import Path
-
-# ═══════════════════════════════════════════
-#  ICON LOADER
-# ═══════════════════════════════════════════
 
 ICON_DIR = Path(__file__).parent / "static" / "icons"
 
 def get_icon_path(key):
-    """Get filesystem path to an icon PNG."""
     p = ICON_DIR / f"{key}.png"
     return str(p) if p.exists() else None
 
-def get_icon_b64(key):
-    """Get icon as base64 string."""
-    p = ICON_DIR / f"{key}.png"
-    if not p.exists():
-        return None
-    with open(p, "rb") as f:
-        return base64.b64encode(f.read()).decode()
-
 def get_all_icon_keys():
-    """List all available icon keys."""
-    return [p.stem for p in ICON_DIR.glob("*.png")]
-
-def get_icon_url(key):
-    """Get web URL for an icon."""
-    return f"/static/icons/{key}.png"
-
-
-# ═══════════════════════════════════════════
-#  SERVICE CATALOG
-# ═══════════════════════════════════════════
+    return sorted([p.stem for p in ICON_DIR.glob("*.png")])
 
 CATALOG = {
     "GCP Compute": [
@@ -65,7 +42,6 @@ CATALOG = {
     "GCP AI / ML": [
         {"id": "vertex_ai", "label": "Vertex AI", "icon": "vertex_ai"},
         {"id": "automl", "label": "AutoML", "icon": "automl"},
-        {"id": "tpu", "label": "Cloud TPU", "icon": "tpu"},
     ],
     "GCP Security & Ops": [
         {"id": "iam", "label": "Cloud IAM", "icon": "iam"},
@@ -85,75 +61,52 @@ CATALOG = {
         {"id": "mssql", "label": "SQL Server", "icon": "mssql"},
         {"id": "mongodb", "label": "MongoDB", "icon": "mongodb"},
         {"id": "cassandra", "label": "Cassandra", "icon": "cassandra"},
-        {"id": "neo4j", "label": "Neo4j", "icon": "neo4j"},
         {"id": "redis", "label": "Redis", "icon": "redis"},
         {"id": "generic_db", "label": "Database", "icon": "generic_db"},
     ],
     "Messaging": [
         {"id": "kafka", "label": "Kafka", "icon": "kafka"},
         {"id": "rabbitmq", "label": "RabbitMQ", "icon": "rabbitmq"},
-        {"id": "activemq", "label": "ActiveMQ", "icon": "activemq"},
         {"id": "nats", "label": "NATS", "icon": "nats"},
     ],
     "AWS": [
         {"id": "aurora", "label": "Aurora", "icon": "aurora"},
         {"id": "dynamodb", "label": "DynamoDB", "icon": "dynamodb"},
         {"id": "redshift", "label": "Redshift", "icon": "redshift"},
-        {"id": "elasticache", "label": "ElastiCache", "icon": "elasticache"},
         {"id": "rds", "label": "RDS", "icon": "rds"},
     ],
     "General": [
         {"id": "user", "label": "User", "icon": "user"},
         {"id": "users", "label": "Users", "icon": "users"},
         {"id": "client", "label": "Client App", "icon": "client"},
-        {"id": "firewall", "label": "Firewall", "icon": "firewall"},
         {"id": "database", "label": "Database", "icon": "database"},
     ],
 }
 
-
-# ═══════════════════════════════════════════
-#  LAYOUT ENGINE
-# ═══════════════════════════════════════════
-
+# ═══ SHARED LAYOUT CONSTANTS ═══
 DEFAULT_ZONES = ["sources", "ingest", "process", "store", "analyze", "serve"]
 DEFAULT_LANES = ["streaming", "batch", "ml"]
 
-DEFAULT_STYLE = {
-    "icon_size": 48,
-    "node_w": 130,
-    "node_h": 88,
-    "zone_gap": 180,
-    "lane_gap": 160,
-    "left_pad": 60,
-    "top_pad": 80,
-    "arrow_color": "#b0b8c1",
-    "arrow_width": 1.5,
-    "lane_colors": {
-        "streaming": "#EBF5FB",
-        "batch": "#F0F9E8",
-        "ml": "#FDF2E9",
-    },
-}
+NW = 120     # node width
+NH = 82      # node height
+IS = 42      # icon size
+ZG = 175     # zone gap
+LG = 145     # lane gap
+LP = 70      # left pad
+TP = 90      # top pad
+GOV_OFF = 50 # governance offset below last lane
+ARROW_COLOR = "#9E9E9E"
+LANE_COLORS = {"streaming": "#E8F4FD", "batch": "#EDF7ED", "ml": "#FFF3E0"}
 
 
 def compute_layout(architecture):
-    """Compute x,y positions for all nodes based on zone/lane."""
     zones = architecture.get("zones", DEFAULT_ZONES)
     lanes = architecture.get("lanes", DEFAULT_LANES)
-    style = architecture.get("style", DEFAULT_STYLE)
     nodes = architecture.get("nodes", [])
 
-    zg = style.get("zone_gap", 180)
-    lg = style.get("lane_gap", 160)
-    lp = style.get("left_pad", 60)
-    tp = style.get("top_pad", 80)
-    nw = style.get("node_w", 130)
+    zone_x = {z: LP + i * ZG for i, z in enumerate(zones)}
+    lane_y = {l: TP + i * LG for i, l in enumerate(lanes)}
 
-    zone_x = {z: lp + i * zg for i, z in enumerate(zones)}
-    lane_y = {l: tp + i * lg for i, l in enumerate(lanes)}
-
-    # Count nodes per cell to spread duplicates
     cells = {}
     for n in nodes:
         key = f"{n.get('zone','')}-{n.get('lane','')}"
@@ -161,59 +114,53 @@ def compute_layout(architecture):
 
     positions = {}
     for n in nodes:
-        z = n.get("zone", "")
-        l = n.get("lane", "")
+        z, l = n.get("zone", ""), n.get("lane", "")
         key = f"{z}-{l}"
         siblings = cells.get(key, [n["id"]])
         idx = siblings.index(n["id"]) if n["id"] in siblings else 0
-        bx = zone_x.get(z, lp)
-        by = lane_y.get(l, tp)
         positions[n["id"]] = {
-            "x": bx + idx * (nw + 20),
-            "y": by,
+            "x": zone_x.get(z, LP) + idx * (NW + 15),
+            "y": lane_y.get(l, TP),
         }
-
     return positions
 
 
+def canvas_bounds(architecture):
+    zones = architecture.get("zones", DEFAULT_ZONES)
+    lanes = architecture.get("lanes", DEFAULT_LANES)
+    return LP + len(zones) * ZG + 60, TP + len(lanes) * LG + GOV_OFF + 100
+
+
 def new_architecture(title="Untitled"):
-    """Create a blank architecture."""
     return {
         "title": title,
         "zones": list(DEFAULT_ZONES),
         "lanes": list(DEFAULT_LANES),
-        "style": dict(DEFAULT_STYLE),
-        "nodes": [],
-        "edges": [],
-        "governance": [],
-        "bestPractices": [],
+        "nodes": [], "edges": [], "governance": [], "bestPractices": [],
     }
 
 
-# ═══════════════════════════════════════════
-#  AI PROMPT
-# ═══════════════════════════════════════════
-
+# ═══ SYSTEM PROMPT ═══
 SYSTEM_PROMPT = """You are XlArch, an expert system architect. Generate architecture as a Python dict.
 
-OUTPUT ONLY A VALID PYTHON DICT LITERAL. No markdown, no backticks, no explanation, no imports.
+OUTPUT ONLY A VALID PYTHON DICT LITERAL. No markdown, no backticks, no explanation.
 Start with { and end with }
 
 Available icon IDs: """ + ", ".join(get_all_icon_keys()) + """
 
-ZONES (left-to-right columns): sources, ingest, process, store, analyze, serve
-LANES (top-to-bottom rows): streaming, batch, ml
+ZONES (left-to-right): sources, ingest, process, store, analyze, serve
+LANES (top-to-bottom): streaming, batch, ml
 
-OUTPUT FORMAT:
+FORMAT:
 {
-    "title": "Architecture title",
+    "title": "Title",
     "zones": ["sources", "ingest", "process", "store", "analyze", "serve"],
     "lanes": ["streaming", "batch", "ml"],
     "nodes": [
         {"id": "unique_id", "icon": "bigquery", "label": "BigQuery", "zone": "store", "lane": "batch", "step": 5},
     ],
     "edges": [
-        {"from": "node_id_1", "to": "node_id_2"},
+        {"from": "id1", "to": "id2"},
     ],
     "governance": [
         {"icon": "iam", "label": "Cloud IAM"},
@@ -224,22 +171,19 @@ OUTPUT FORMAT:
 }
 
 RULES:
-- 8-18 nodes depending on complexity
-- Number steps 1-N to show processing order
-- Always include governance: at minimum IAM and monitoring
-- Include best practices for reliability, security, cost, performance
-- Use real icon IDs from the available list
-- Place each node in exactly one zone and one lane
-- Edges show data flow direction (from → to)
+- 8-18 nodes
+- Number steps 1-N in data flow order
+- Include governance: IAM, monitoring minimum
+- 4-8 best practices across SECURITY, RELIABILITY, COST, PERFORMANCE
+- Use only icon IDs from the available list
+- Each node in exactly one zone and one lane
+- Connect: sources→ingest→process→store→analyze→serve
 """
 
 
-# ═══════════════════════════════════════════
-#  PPTX RENDERER
-# ═══════════════════════════════════════════
+# ═══ PPTX RENDERER ═══
 
 def render_pptx(architecture, output_path):
-    """Render architecture dict to an editable PPTX file."""
     from pptx import Presentation
     from pptx.util import Inches, Pt
     from pptx.dml.color import RGBColor
@@ -247,8 +191,16 @@ def render_pptx(architecture, output_path):
     from pptx.enum.shapes import MSO_SHAPE
 
     positions = compute_layout(architecture)
-    style = architecture.get("style", DEFAULT_STYLE)
-    S = 0.012  # canvas units → inches
+    cw, ch = canvas_bounds(architecture)
+    zones = architecture.get("zones", DEFAULT_ZONES)
+    lanes = architecture.get("lanes", DEFAULT_LANES)
+
+    # Scale virtual canvas → 13.3" × 7.5" slide
+    margin = 0.35
+    scale = min((13.3 - 2*margin) / cw, (7.5 - 2*margin) / ch)
+    def sx(x): return margin + x * scale
+    def sy(y): return margin + y * scale
+    def sw(v): return v * scale
 
     prs = Presentation()
     prs.slide_width = Inches(13.3)
@@ -259,180 +211,139 @@ def render_pptx(architecture, output_path):
         h = h.lstrip("#")
         return RGBColor(int(h[:2],16), int(h[2:4],16), int(h[4:],16))
 
-    # Title
-    tx = slide.shapes.add_textbox(Inches(0.3), Inches(0.1), Inches(8), Inches(0.4))
-    p = tx.text_frame.paragraphs[0]
-    p.text = architecture.get("title", "Architecture")
-    p.font.size = Pt(16); p.font.bold = True; p.font.color.rgb = rgb("#202124")
+    def txt(x, y, w, h, text, sz=7, col="3C4043", bold=False, align="center"):
+        tx = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
+        tf = tx.text_frame; tf.word_wrap = True; p = tf.paragraphs[0]
+        p.text = text; p.font.size = Pt(sz); p.font.color.rgb = rgb(col); p.font.bold = bold
+        p.alignment = {"center": PP_ALIGN.CENTER, "left": PP_ALIGN.LEFT}.get(align, PP_ALIGN.CENTER)
 
-    icon_s = style.get("icon_size", 48) * S
-    nw = style.get("node_w", 130) * S
-    nh = style.get("node_h", 88) * S
+    # Title
+    txt(sx(0), 0.12, sw(cw), 0.35, architecture.get("title", ""), sz=14, col="202124", bold=True, align="left")
+
+    # Lane backgrounds
+    for i, lane in enumerate(lanes):
+        ly = TP + i * LG - 18
+        shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE,
+            Inches(sx(25)), Inches(sy(ly)), Inches(sw(len(zones)*ZG+40)), Inches(sw(NH+50)))
+        shape.fill.solid(); shape.fill.fore_color.rgb = rgb(LANE_COLORS.get(lane, "#F5F5F5"))
+        shape.line.fill.background()
+
+    # Zone labels
+    for i, z in enumerate(zones):
+        txt(sx(LP + i*ZG), sy(25), sw(NW), 0.15, z.upper(), sz=6.5, col="BDBDBD", bold=True)
 
     # Nodes
+    nw_in, nh_in, is_in = sw(NW), sw(NH), sw(IS)
     for n in architecture.get("nodes", []):
-        pos = positions.get(n["id"])
-        if not pos:
-            continue
-        px = pos["x"] * S + 0.5
-        py = pos["y"] * S + 0.3
+        p = positions.get(n["id"])
+        if not p: continue
+        px, py = sx(p["x"]), sy(p["y"])
 
         # Icon
-        icon_path = get_icon_path(n.get("icon", ""))
-        if icon_path:
-            ix = px + (nw - icon_s) / 2
-            slide.shapes.add_picture(icon_path, Inches(ix), Inches(py), Inches(icon_s), Inches(icon_s))
+        ipath = get_icon_path(n.get("icon", ""))
+        if ipath:
+            try: slide.shapes.add_picture(ipath, Inches(px + (nw_in-is_in)/2), Inches(py+0.02), Inches(is_in), Inches(is_in))
+            except: pass
 
         # Label
-        tx = slide.shapes.add_textbox(Inches(px - 0.1), Inches(py + icon_s + 0.02), Inches(nw + 0.2), Inches(0.3))
-        tf = tx.text_frame; tf.word_wrap = True
-        p = tf.paragraphs[0]
-        p.text = n.get("label", "")
-        p.font.size = Pt(7); p.font.color.rgb = rgb("#3C4043")
-        p.alignment = PP_ALIGN.CENTER
+        txt(px-0.03, py+is_in+0.01, nw_in+0.06, 0.22, n.get("label",""), sz=6.5)
 
         # Step badge
         if "step" in n:
-            sz = 0.2
-            shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE,
-                Inches(px + nw - 0.05), Inches(py - 0.05), Inches(sz), Inches(sz))
-            shape.fill.solid()
-            shape.fill.fore_color.rgb = rgb("#4285F4")
-            shape.line.fill.background()
-            p = shape.text_frame.paragraphs[0]
-            p.text = str(n["step"])
-            p.font.size = Pt(8); p.font.color.rgb = RGBColor(255,255,255)
-            p.font.bold = True; p.alignment = PP_ALIGN.CENTER
+            bsz = 0.17
+            s = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE,
+                Inches(px+nw_in-0.01), Inches(py-0.02), Inches(bsz), Inches(bsz))
+            s.fill.solid(); s.fill.fore_color.rgb = rgb("4285F4"); s.line.fill.background()
+            p2 = s.text_frame.paragraphs[0]
+            p2.text = str(n["step"]); p2.font.size = Pt(7)
+            p2.font.color.rgb = RGBColor(255,255,255); p2.font.bold = True
+            p2.alignment = PP_ALIGN.CENTER
 
     # Edges
     for e in architecture.get("edges", []):
-        fp = positions.get(e["from"])
-        tp = positions.get(e["to"])
-        if not fp or not tp:
-            continue
-        x1 = (fp["x"] + style.get("node_w", 130)) * S + 0.5
-        y1 = (fp["y"] + style.get("node_h", 88) / 2) * S + 0.3
-        x2 = tp["x"] * S + 0.5
-        y2 = (tp["y"] + style.get("node_h", 88) / 2) * S + 0.3
-        conn = slide.shapes.add_connector(1, Inches(x1), Inches(y1), Inches(x2), Inches(y2))
-        conn.line.color.rgb = rgb("#9E9E9E")
-        conn.line.width = Pt(0.75)
+        fp, tp = positions.get(e["from"]), positions.get(e["to"])
+        if not fp or not tp: continue
+        conn = slide.shapes.add_connector(1,
+            Inches(sx(fp["x"]+NW)), Inches(sy(fp["y"]+NH/2)),
+            Inches(sx(tp["x"])), Inches(sy(tp["y"]+NH/2)))
+        conn.line.color.rgb = rgb(ARROW_COLOR); conn.line.width = Pt(0.75)
 
     # Governance bar
-    gov_y = 6.0
-    for i, g in enumerate(architecture.get("governance", [])):
-        gx = 0.5 + i * 2.0
-        icon_path = get_icon_path(g.get("icon", ""))
-        if icon_path:
-            slide.shapes.add_picture(icon_path, Inches(gx), Inches(gov_y), Inches(0.4), Inches(0.4))
-        tx = slide.shapes.add_textbox(Inches(gx - 0.15), Inches(gov_y + 0.42), Inches(0.7), Inches(0.2))
-        p = tx.text_frame.paragraphs[0]
-        p.text = g.get("label", ""); p.font.size = Pt(6)
-        p.font.color.rgb = rgb("#5F6368"); p.alignment = PP_ALIGN.CENTER
+    gov = architecture.get("governance", [])
+    if gov:
+        gy = TP + len(lanes)*LG + GOV_OFF
+        bw = len(zones)*ZG + 40
+        s = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE,
+            Inches(sx(25)), Inches(sy(gy-8)), Inches(sw(bw)), Inches(sw(75)))
+        s.fill.solid(); s.fill.fore_color.rgb = rgb("F3E8FD")
+        s.line.color.rgb = rgb("A142F4"); s.line.width = Pt(0.3)
+
+        txt(sx(35), sy(gy-3), sw(180), 0.12, "GOVERNANCE & SECURITY", sz=5, col="8430CE", bold=True, align="left")
+
+        gis = sw(30)
+        spacing = bw / max(len(gov)+1, 1)
+        for i, g in enumerate(gov):
+            gx = 40 + (i+0.5) * spacing
+            ipath = get_icon_path(g.get("icon",""))
+            if ipath:
+                try: slide.shapes.add_picture(ipath, Inches(sx(gx)), Inches(sy(gy+12)), Inches(gis), Inches(gis))
+                except: pass
+            txt(sx(gx)-0.08, sy(gy+12)+gis+0.01, gis+0.16, 0.12, g.get("label",""), sz=5, col="5F6368")
 
     prs.save(output_path)
     return output_path
 
 
-# ═══════════════════════════════════════════
-#  PNG RENDERER (via diagrams library)
-# ═══════════════════════════════════════════
+# ═══ PNG RENDERER ═══
 
 def render_png(architecture, output_path):
-    """Render architecture dict to PNG using diagrams library."""
-    # Build a temporary Python script and execute it
     nodes = architecture.get("nodes", [])
     edges = architecture.get("edges", [])
     title = architecture.get("title", "Architecture")
 
-    # Map icon keys to diagrams library imports
-    DIAGRAMS_MAP = {
-        "bigquery": ("diagrams.gcp.analytics", "BigQuery"),
-        "dataflow": ("diagrams.gcp.analytics", "Dataflow"),
-        "pubsub": ("diagrams.gcp.analytics", "PubSub"),
-        "composer": ("diagrams.gcp.analytics", "Composer"),
-        "looker": ("diagrams.gcp.analytics", "Looker"),
-        "data_catalog": ("diagrams.gcp.analytics", "DataCatalog"),
-        "dataproc": ("diagrams.gcp.analytics", "Dataproc"),
-        "gcs": ("diagrams.gcp.storage", "GCS"),
-        "bigtable": ("diagrams.gcp.database", "BigTable"),
-        "memorystore": ("diagrams.gcp.database", "Memorystore"),
-        "spanner": ("diagrams.gcp.database", "Spanner"),
-        "firestore": ("diagrams.gcp.database", "Firestore"),
-        "cloudsql": ("diagrams.gcp.database", "SQL"),
-        "vertex_ai": ("diagrams.gcp.ml", "VertexAI"),
-        "automl": ("diagrams.gcp.ml", "AutoML"),
-        "tpu": ("diagrams.gcp.ml", "TPU"),
-        "cloud_run": ("diagrams.gcp.compute", "CloudRun"),
-        "functions": ("diagrams.gcp.compute", "Functions"),
-        "gke": ("diagrams.gcp.compute", "GKE"),
-        "compute_engine": ("diagrams.gcp.compute", "ComputeEngine"),
-        "iam": ("diagrams.gcp.security", "Iam"),
-        "kms": ("diagrams.gcp.security", "KMS"),
-        "monitoring": ("diagrams.gcp.operations", "Monitoring"),
-        "logging": ("diagrams.gcp.operations", "Logging"),
-        "load_balancing": ("diagrams.gcp.network", "LoadBalancing"),
-        "cdn": ("diagrams.gcp.network", "CDN"),
-        "dns": ("diagrams.gcp.network", "DNS"),
-        "kafka": ("diagrams.onprem.queue", "Kafka"),
-        "rabbitmq": ("diagrams.onprem.queue", "RabbitMQ"),
-        "postgresql": ("diagrams.onprem.database", "PostgreSQL"),
-        "mysql": ("diagrams.onprem.database", "MySQL"),
-        "oracle": ("diagrams.onprem.database", "Oracle"),
-        "mssql": ("diagrams.onprem.database", "Mssql"),
-        "mongodb": ("diagrams.onprem.database", "MongoDB"),
-        "cassandra": ("diagrams.onprem.database", "Cassandra"),
-        "redis": ("diagrams.onprem.inmemory", "Redis"),
+    DMAP = {
+        "bigquery":("diagrams.gcp.analytics","BigQuery"), "dataflow":("diagrams.gcp.analytics","Dataflow"),
+        "pubsub":("diagrams.gcp.analytics","PubSub"), "composer":("diagrams.gcp.analytics","Composer"),
+        "looker":("diagrams.gcp.analytics","Looker"), "dataproc":("diagrams.gcp.analytics","Dataproc"),
+        "gcs":("diagrams.gcp.storage","GCS"), "bigtable":("diagrams.gcp.database","BigTable"),
+        "memorystore":("diagrams.gcp.database","Memorystore"), "spanner":("diagrams.gcp.database","Spanner"),
+        "firestore":("diagrams.gcp.database","Firestore"), "cloudsql":("diagrams.gcp.database","SQL"),
+        "vertex_ai":("diagrams.gcp.ml","VertexAI"), "cloud_run":("diagrams.gcp.compute","CloudRun"),
+        "functions":("diagrams.gcp.compute","Functions"), "gke":("diagrams.gcp.compute","GKE"),
+        "compute_engine":("diagrams.gcp.compute","ComputeEngine"),
+        "iam":("diagrams.gcp.security","Iam"), "kms":("diagrams.gcp.security","KMS"),
+        "monitoring":("diagrams.gcp.operations","Monitoring"), "logging":("diagrams.gcp.operations","Logging"),
+        "kafka":("diagrams.onprem.queue","Kafka"), "rabbitmq":("diagrams.onprem.queue","RabbitMQ"),
+        "postgresql":("diagrams.onprem.database","PostgreSQL"), "mysql":("diagrams.onprem.database","MySQL"),
+        "oracle":("diagrams.onprem.database","Oracle"), "mssql":("diagrams.onprem.database","Mssql"),
+        "mongodb":("diagrams.onprem.database","MongoDB"), "redis":("diagrams.onprem.inmemory","Redis"),
     }
 
-    # Collect needed imports
-    imports = set()
-    node_map = {}
+    imports, nmap = set(), {}
     for n in nodes:
-        icon = n.get("icon", "")
-        if icon in DIAGRAMS_MAP:
-            mod, cls = DIAGRAMS_MAP[icon]
+        if n.get("icon","") in DMAP:
+            mod, cls = DMAP[n["icon"]]
             imports.add(f"from {mod} import {cls}")
-            node_map[n["id"]] = (cls, n.get("label", n["id"]))
+            nmap[n["id"]] = (cls, n.get("label", n["id"]))
 
-    if not node_map:
-        return None
+    if not nmap: return None
 
-    # Build script
-    lines = [
-        "from diagrams import Diagram, Edge",
-        *sorted(imports),
-        "",
+    lines = ["from diagrams import Diagram, Edge", *sorted(imports), "",
         f'with Diagram("{title}", filename="{output_path}", show=False, direction="LR",',
-        '             graph_attr={"splines": "ortho", "nodesep": "0.6", "ranksep": "0.9", "bgcolor": "#FFFFFF"}):',
-    ]
-
-    # Declare nodes
-    for nid, (cls, label) in node_map.items():
-        safe_id = nid.replace("-", "_")
-        lines.append(f'    {safe_id} = {cls}("{label}")')
-
-    # Declare edges
+        '             graph_attr={"splines":"ortho","nodesep":"0.6","ranksep":"0.9","bgcolor":"#FFFFFF"}):']
+    for nid, (cls, label) in nmap.items():
+        s = nid.replace("-","_").replace(" ","_")
+        lines.append(f'    {s} = {cls}("{label}")')
+    valid = {nid.replace("-","_").replace(" ","_") for nid in nmap}
     for e in edges:
-        f_id = e["from"].replace("-", "_")
-        t_id = e["to"].replace("-", "_")
-        if f_id in [nid.replace("-","_") for nid in node_map] and t_id in [nid.replace("-","_") for nid in node_map]:
-            lines.append(f'    {f_id} >> {t_id}')
+        f, t = e["from"].replace("-","_").replace(" ","_"), e["to"].replace("-","_").replace(" ","_")
+        if f in valid and t in valid: lines.append(f'    {f} >> {t}')
 
-    script = "\n".join(lines)
-
-    import tempfile, subprocess
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-        f.write(script)
-        script_path = f.name
-
+        f.write("\n".join(lines)); sp = f.name
     try:
-        result = subprocess.run(["python3", script_path], capture_output=True, text=True, timeout=30)
-        if result.returncode == 0:
-            return f"{output_path}.png"
-    except Exception:
-        pass
-    finally:
-        os.unlink(script_path)
-
+        r = subprocess.run(["python3", sp], capture_output=True, text=True, timeout=30)
+        if r.returncode == 0: return f"{output_path}.png"
+    except: pass
+    finally: os.unlink(sp)
     return None
