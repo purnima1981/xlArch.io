@@ -2,13 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" href="/static/favicon.ico">
+<link rel="icon" type="image/png" href="/static/favicon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>XlArch</title>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui,-apple-system,sans-serif;background:#0e0e0e;color:#ddd;height:100vh;display:flex;flex-direction:column;overflow:hidden}
 .top{height:52px;background:#080808;border-bottom:1px solid #1e1e1e;display:flex;align-items:center;padding:0 20px;gap:14px;flex-shrink:0}
-.top img{height:24px;opacity:0.5}
+.top img{height:28px}
 .sp{flex:1}
 .avatar{width:30px;height:30px;border-radius:50%;background:#1a1a1a;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;color:#666;border:1px solid #2a2a2a}
 .uname{font-size:12px;color:#444}
@@ -16,7 +18,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#0e0e0e;color:#dd
 .logout:hover{border-color:#444;color:#888}
 .main{flex:1;display:flex;align-items:center;justify-content:center}
 .inner{text-align:center;max-width:500px;width:100%;padding:20px}
-.inner img{height:40px;opacity:0.35;margin-bottom:28px}
+.inner img{height:72px;margin-bottom:32px}
 .inner h2{font-size:22px;font-weight:700;margin-bottom:10px;letter-spacing:-0.5px}
 .inner p{font-size:15px;color:#555;margin-bottom:32px;line-height:1.6}
 .prompt{position:relative}
@@ -35,7 +37,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#0e0e0e;color:#dd
 <body>
 
 <div class="top">
-  <img src="/static/logo.svg" alt="XlArch">
+  <img src="/static/icon-white.svg" alt="XlArch">
   <div class="sp"></div>
   <div class="avatar">{{ user.name[0] | upper }}</div>
   <span class="uname">{{ user.name }}</span>
@@ -44,7 +46,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#0e0e0e;color:#dd
 
 <div class="main">
   <div class="inner">
-    <img src="/static/logo.svg" alt="">
+    <img src="/static/icon-white.svg" alt="XlArch">
     <h2>What are you architecting?</h2>
     <p>Describe your system. XlArch generates a validated, production-ready architecture.</p>
     <div class="prompt">
@@ -74,7 +76,7 @@ const p = document.getElementById("prompt");
 function fill(t) { p.value = t; p.focus(); }
 function generate() {
   if (!p.value.trim()) return;
-  alert("Canvas coming next! Prompt:\n\n" + p.value);
+  window.location.href = "/canvas?prompt=" + encodeURIComponent(p.value.trim());
 }
 p.addEventListener("keydown", e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) generate(); });
 </script>

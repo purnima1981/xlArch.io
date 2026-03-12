@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # XlArch.io
 
 The intelligent architecture platform.
@@ -42,6 +41,3 @@ xlarch/
 ├── Procfile
 └── railway.toml
 ```
-=======
-# xlArch.io
->>>>>>> 0308ef24dae76a6a3c148ab9e33b59b0c1ffe94f

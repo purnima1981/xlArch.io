@@ -2,13 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" href="/static/favicon.ico">
+<link rel="icon" type="image/png" href="/static/favicon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{% if mode == 'signup' %}Sign Up{% elif mode == 'reset' %}Reset Password{% else %}Log In{% endif %} — XlArch</title>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui,-apple-system,sans-serif;background:#fafafa;color:#111;min-height:100vh;display:flex;flex-direction:column}
 nav{padding:20px 48px}
-nav img{height:32px;cursor:pointer}
+nav img{height:32px}
 .wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:20px}
 .card{width:100%;max-width:420px;background:#fff;border:1px solid #eee;border-radius:14px;padding:40px 36px;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
 .card h2{font-size:24px;font-weight:700;margin-bottom:6px;letter-spacing:-0.5px}
@@ -33,7 +35,7 @@ button[type=submit]:hover{opacity:0.85}
 </head>
 <body>
 
-<nav><a href="/"><img src="/static/logo.svg" alt="XlArch"></a></nav>
+<nav><a href="/"><img src="/static/icon.svg" alt="XlArch"></a></nav>
 
 <div class="wrap">
   <div class="card">
@@ -53,30 +55,25 @@ button[type=submit]:hover{opacity:0.85}
     {% if success %}<div class="ok">{{ success }}</div>{% endif %}
 
     <form method="POST" action="/auth/{{ mode }}">
-
       {% if mode == 'signup' %}
       <div class="field">
         <label>Full name</label>
         <input type="text" name="name" placeholder="Full name" required autofocus>
       </div>
       {% endif %}
-
       <div class="field">
         <label>Email</label>
         <input type="email" name="email" placeholder="Work email" required {% if mode != 'signup' %}autofocus{% endif %}>
       </div>
-
       {% if mode != 'reset' %}
       <div class="field">
         <label>Password</label>
         <input type="password" name="password" placeholder="{% if mode == 'signup' %}Create a password{% else %}Password{% endif %}" required minlength="6">
       </div>
       {% endif %}
-
       {% if mode == 'login' %}
       <div class="forgot"><a href="/reset">Forgot password?</a></div>
       {% endif %}
-
       <button type="submit">
         {% if mode == 'signup' %}Create Account{% elif mode == 'reset' %}Send Reset Link{% else %}Log In{% endif %}
       </button>

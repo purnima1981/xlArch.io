@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/favicon.ico">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XlArch — Canvas</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:#0e0e0e;color:#ddd;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* Top bar */
+.top{height:48px;background:#080808;border-bottom:1px solid #1e1e1e;display:flex;align-items:center;padding:0 16px;gap:10px;flex-shrink:0}
+.top img{height:22px}
+.sp{flex:1}
+.tbtn{padding:5px 14px;font-size:11px;background:#161616;border:1px solid #2a2a2a;border-radius:6px;color:#888;cursor:pointer;font-family:inherit}
+.tbtn:hover{border-color:#444;color:#ccc}
+.tbtn.act{background:#1a3a1a;border-color:#3a3;color:#6d6}
+.avatar{width:28px;height:28px;border-radius:50%;background:#1a1a1a;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:11px;color:#666;border:1px solid #2a2a2a}
+.uname{font-size:11px;color:#444}
+
+/* Main layout */
+.main{flex:1;display:flex;overflow:hidden}
+
+/* Sidebar */
+.sidebar{width:220px;background:#0a0a0a;border-right:1px solid #1e1e1e;display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
+.sidebar.hidden{display:none}
+.stitle{font-size:9px;color:#555;text-transform:uppercase;letter-spacing:1.5px;padding:12px 14px 6px}
+.scat{padding:4px 14px;font-size:10px;color:#666;font-weight:600}
+.sitem{display:flex;align-items:center;gap:8px;padding:5px 14px;font-size:11px;color:#888;cursor:grab}
+.sitem:hover{background:#161616;color:#ccc}
+.sitem img{width:22px;height:22px}
+.slist{flex:1;overflow-y:auto}
+
+/* Best practices panel */
+.bp{width:260px;background:#0a0a0a;border-left:1px solid #1e1e1e;overflow-y:auto;padding:12px;flex-shrink:0}
+.bp.hidden{display:none}
+.bp h3{font-size:11px;color:#888;margin-bottom:10px}
+.bpcard{padding:8px 10px;margin-bottom:6px;background:#111;border-radius:6px;border-left:3px solid #4285F4}
+.bpcard[data-c="SECURITY"]{border-left-color:#34A853}
+.bpcard[data-c="COST"]{border-left-color:#F9AB00}
+.bpcard[data-c="PERFORMANCE"]{border-left-color:#EA4335}
+.bpcard .cat{font-size:8px;color:#666;text-transform:uppercase;letter-spacing:1px}
+.bpcard .tip{font-size:11px;color:#aaa;line-height:1.4;margin-top:2px}
+
+/* Canvas */
+canvas{flex:1;cursor:default}
+
+/* Status bar */
+.status{height:26px;background:#080808;border-top:1px solid #1e1e1e;display:flex;align-items:center;padding:0 14px;font-size:10px;color:#333;gap:12px}
+.dot{width:5px;height:5px;border-radius:50%;background:#3a3}
+
+/* Loading overlay */
+.loading{position:absolute;top:48px;left:0;right:0;bottom:26px;background:rgba(14,14,14,0.9);display:flex;align-items:center;justify-content:center;z-index:100;flex-direction:column;gap:12px}
+.loading.hidden{display:none}
+.spinner{width:32px;height:32px;border:3px solid #2a2a2a;border-top-color:#888;border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading p{font-size:13px;color:#666}
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="top">
+  <a href="/app"><img src="/static/icon-white.svg" alt="XlArch"></a>
+  <div class="sp"></div>
+  <button class="tbtn" onclick="toggleSidebar()" id="sidebarBtn">Services</button>
+  <button class="tbtn" onclick="toggleBP()" id="bpBtn">Practices</button>
+  <span style="color:#333">|</span>
+  <button class="tbtn" onclick="exportPPTX()">PPTX</button>
+  <button class="tbtn" onclick="exportPNG()">PNG</button>
+  <button class="tbtn" onclick="saveArch()">Save</button>
+  <span style="color:#333">|</span>
+  <button class="tbtn" onclick="zoomIn()">+</button>
+  <span id="zoomLbl" style="font-size:10px;color:#444;min-width:36px;text-align:center">100%</span>
+  <button class="tbtn" onclick="zoomOut()">−</button>
+  <button class="tbtn" onclick="resetView()">⟲</button>
+  <div class="sp"></div>
+  <div class="avatar">{{ user.name[0] | upper }}</div>
+  <span class="uname">{{ user.name }}</span>
+</div>
+
+<!-- Main -->
+<div class="main" style="position:relative">
+  <!-- Sidebar: Service palette -->
+  <div class="sidebar hidden" id="sidebar">
+    <div class="stitle">Drag to canvas</div>
+    <div class="slist">
+      {% for cat, services in catalog.items() %}
+      <div class="scat">{{ cat }}</div>
+      {% for svc in services %}
+      <div class="sitem" draggable="true" data-svc='{{ svc | tojson }}'>
+        <img src="/static/icons/{{ svc.icon }}.png" alt="">
+        <span>{{ svc.label }}</span>
+      </div>
+      {% endfor %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Canvas -->
+  <canvas id="cv"></canvas>
+
+  <!-- Best Practices -->
+  <div class="bp hidden" id="bp">
+    <h3>Well-Architected Review</h3>
+    <div id="bpList"></div>
+  </div>
+
+  <!-- Loading -->
+  <div class="loading hidden" id="loading">
+    <div class="spinner"></div>
+    <p>Generating architecture...</p>
+  </div>
+</div>
+
+<!-- Status bar -->
+<div class="status">
+  <div class="dot"></div>
+  <span id="statusText">Ready</span>
+  <div class="sp"></div>
+  <span id="nodeCount"></span>
+  <span>v0.1</span>
+</div>
+
+<script>
+// ═══════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════
+let arch = null;       // architecture dict
+let pos = {};          // node positions {id: {x,y}}
+let zoom = 1, panX = 0, panY = 0;
+let dragging = null, dragOff = {x:0, y:0};
+let isPanning = false, panStart = {x:0, y:0};
+const imgCache = {};
+
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+let W, H;
+
+const NW = 130, NH = 88, IS = 48;
+
+// ═══════════════════════════════════════
+//  RESIZE
+// ═══════════════════════════════════════
+function resize() {
+  const par = cv.parentElement;
+  const sb = document.getElementById("sidebar");
+  const bp = document.getElementById("bp");
+  const sbW = sb.classList.contains("hidden") ? 0 : 220;
+  const bpW = bp.classList.contains("hidden") ? 0 : 260;
+  W = par.clientWidth - sbW - bpW;
+  H = par.clientHeight;
+  cv.width = W * devicePixelRatio;
+  cv.height = H * devicePixelRatio;
+  cv.style.width = W + "px";
+  cv.style.height = H + "px";
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  draw();
+}
+window.addEventListener("resize", resize);
+
+// ═══════════════════════════════════════
+//  COORDINATE TRANSFORM
+// ═══════════════════════════════════════
+function toCanvas(ex, ey) {
+  const r = cv.getBoundingClientRect();
+  return [(ex - r.left) / zoom - panX, (ey - r.top) / zoom - panY];
+}
+
+// ═══════════════════════════════════════
+//  PRELOAD ICON IMAGES
+// ═══════════════════════════════════════
+function preloadIcon(key) {
+  if (imgCache[key]) return;
+  const img = new Image();
+  img.src = `/static/icons/${key}.png`;
+  img.onload = () => draw();
+  imgCache[key] = img;
+}
+
+// ═══════════════════════════════════════
+//  DRAW
+// ═══════════════════════════════════════
+function draw() {
+  if (!ctx) return;
+  ctx.save();
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  ctx.fillStyle = "#f8f9fb";
+  ctx.fillRect(0, 0, W, H);
+
+  // Dot grid
+  ctx.fillStyle = "#e0e0e0";
+  const gs = 24;
+  const sx = (-panX * zoom) % gs, sy = (-panY * zoom) % gs;
+  for (let x = -sx; x < W; x += gs / zoom)
+    for (let y = -sy; y < H; y += gs / zoom) {
+      ctx.beginPath(); ctx.arc(x, y, 0.6, 0, Math.PI * 2); ctx.fill();
+    }
+
+  ctx.translate(panX * zoom, panY * zoom);
+  ctx.scale(zoom, zoom);
+
+  if (!arch || !arch.nodes) { ctx.restore(); return; }
+
+  const zones = arch.zones || [];
+  const lanes = arch.lanes || [];
+  const style = arch.style || {};
+  const zg = style.zone_gap || 180;
+  const lg = style.lane_gap || 160;
+  const lc = style.lane_colors || {};
+
+  // Lane backgrounds
+  lanes.forEach((lane, i) => {
+    const y = 80 + i * lg - 25;
+    ctx.fillStyle = lc[lane] || "#f5f5f5";
+    ctx.globalAlpha = 0.3;
+    if (ctx.roundRect) {
+      ctx.beginPath(); ctx.roundRect(20, y, zones.length * zg + 80, NH + 70, 8); ctx.fill();
+    } else {
+      ctx.fillRect(20, y, zones.length * zg + 80, NH + 70);
+    }
+    ctx.globalAlpha = 1;
+  });
+
+  // Zone labels
+  ctx.font = "600 9px system-ui";
+  ctx.fillStyle = "#bbb";
+  zones.forEach((z, i) => {
+    ctx.fillText(z.toUpperCase(), 60 + i * zg + 20, 45);
+  });
+
+  // Edges (bezier)
+  (arch.edges || []).forEach(e => {
+    const fp = pos[e.from], tp = pos[e.to];
+    if (!fp || !tp) return;
+    const x1 = fp.x + NW, y1 = fp.y + NH / 2;
+    const x2 = tp.x, y2 = tp.y + NH / 2;
+    const cx = Math.abs(x2 - x1) * 0.45;
+
+    ctx.strokeStyle = style.arrow_color || "#b0b8c1";
+    ctx.lineWidth = style.arrow_width || 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.bezierCurveTo(x1 + cx, y1, x2 - cx, y2, x2, y2);
+    ctx.stroke();
+
+    // Arrow dot
+    ctx.fillStyle = style.arrow_color || "#b0b8c1";
+    ctx.beginPath(); ctx.arc(x2, y2, 3, 0, Math.PI * 2); ctx.fill();
+  });
+
+  // Nodes
+  arch.nodes.forEach(n => {
+    const p = pos[n.id];
+    if (!p) return;
+
+    // Shadow
+    ctx.fillStyle = "rgba(0,0,0,0.04)";
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(p.x+1, p.y+2, NW, NH, 10); ctx.fill(); }
+
+    // Card
+    ctx.fillStyle = "#fff";
+    ctx.strokeStyle = "#e0e4e8";
+    ctx.lineWidth = 1;
+    if (ctx.roundRect) {
+      ctx.beginPath(); ctx.roundRect(p.x, p.y, NW, NH, 10); ctx.fill(); ctx.stroke();
+    } else {
+      ctx.fillRect(p.x, p.y, NW, NH);
+      ctx.strokeRect(p.x, p.y, NW, NH);
+    }
+
+    // Icon
+    preloadIcon(n.icon);
+    const img = imgCache[n.icon];
+    if (img && img.complete && img.naturalWidth > 0) {
+      ctx.drawImage(img, p.x + (NW - IS) / 2, p.y + 6, IS, IS);
+    }
+
+    // Label
+    ctx.font = "500 9px system-ui";
+    ctx.fillStyle = "#3c4043";
+    ctx.textAlign = "center";
+    ctx.fillText(n.label || "", p.x + NW / 2, p.y + NH - 8);
+    ctx.textAlign = "start";
+
+    // Step badge
+    if (n.step != null) {
+      const bx = p.x + NW - 14, by = p.y - 6;
+      ctx.fillStyle = "#4285F4";
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx, by, 20, 16, 4); ctx.fill(); }
+      else { ctx.fillRect(bx, by, 20, 16); }
+      ctx.font = "700 9px system-ui";
+      ctx.fillStyle = "#fff";
+      ctx.textAlign = "center";
+      ctx.fillText(n.step, bx + 10, by + 12);
+      ctx.textAlign = "start";
+    }
+
+    // Connection dots
+    ctx.fillStyle = "#e0e4e8";
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(p.x, p.y + NH/2, 4, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(p.x + NW, p.y + NH/2, 4, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+  });
+
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════
+//  INTERACTION
+// ═══════════════════════════════════════
+cv.addEventListener("mousedown", e => {
+  const [mx, my] = toCanvas(e.clientX, e.clientY);
+  // Hit test nodes (reverse for topmost)
+  if (arch && arch.nodes) {
+    for (let i = arch.nodes.length - 1; i >= 0; i--) {
+      const n = arch.nodes[i];
+      const p = pos[n.id];
+      if (p && mx >= p.x && mx <= p.x + NW && my >= p.y && my <= p.y + NH) {
+        dragging = n.id;
+        dragOff = {x: mx - p.x, y: my - p.y};
+        cv.style.cursor = "grabbing";
+        return;
+      }
+    }
+  }
+  isPanning = true;
+  panStart = {x: e.clientX, y: e.clientY};
+  cv.style.cursor = "grabbing";
+});
+
+cv.addEventListener("mousemove", e => {
+  if (dragging) {
+    const [mx, my] = toCanvas(e.clientX, e.clientY);
+    pos[dragging] = {x: mx - dragOff.x, y: my - dragOff.y};
+    draw();
+  } else if (isPanning) {
+    panX += (e.clientX - panStart.x) / zoom;
+    panY += (e.clientY - panStart.y) / zoom;
+    panStart = {x: e.clientX, y: e.clientY};
+    draw();
+  }
+});
+
+cv.addEventListener("mouseup", () => { dragging = null; isPanning = false; cv.style.cursor = "default"; });
+cv.addEventListener("mouseleave", () => { dragging = null; isPanning = false; cv.style.cursor = "default"; });
+
+cv.addEventListener("wheel", e => {
+  e.preventDefault();
+  zoom = Math.max(0.3, Math.min(2.5, zoom - e.deltaY * 0.001));
+  document.getElementById("zoomLbl").textContent = Math.round(zoom * 100) + "%";
+  draw();
+}, {passive: false});
+
+// ═══════════════════════════════════════
+//  DROP FROM SIDEBAR
+// ═══════════════════════════════════════
+document.querySelectorAll(".sitem").forEach(el => {
+  el.addEventListener("dragstart", e => {
+    e.dataTransfer.setData("text/plain", el.dataset.svc);
+  });
+});
+
+cv.addEventListener("dragover", e => e.preventDefault());
+cv.addEventListener("drop", e => {
+  e.preventDefault();
+  if (!arch) return;
+  try {
+    const svc = JSON.parse(e.dataTransfer.getData("text/plain"));
+    const [x, y] = toCanvas(e.clientX, e.clientY);
+    const newId = svc.id + "_" + Date.now();
+    arch.nodes.push({id: newId, icon: svc.icon, label: svc.label, zone: "custom", lane: "custom"});
+    pos[newId] = {x, y};
+    updateStatus();
+    draw();
+  } catch(err) {}
+});
+
+// ═══════════════════════════════════════
+//  TOOLBAR FUNCTIONS
+// ═══════════════════════════════════════
+function toggleSidebar() {
+  const sb = document.getElementById("sidebar");
+  sb.classList.toggle("hidden");
+  document.getElementById("sidebarBtn").classList.toggle("act", !sb.classList.contains("hidden"));
+  resize();
+}
+
+function toggleBP() {
+  const bp = document.getElementById("bp");
+  bp.classList.toggle("hidden");
+  document.getElementById("bpBtn").classList.toggle("act", !bp.classList.contains("hidden"));
+  resize();
+}
+
+function zoomIn() { zoom = Math.min(2.5, zoom + 0.15); document.getElementById("zoomLbl").textContent = Math.round(zoom*100)+"%"; draw(); }
+function zoomOut() { zoom = Math.max(0.3, zoom - 0.15); document.getElementById("zoomLbl").textContent = Math.round(zoom*100)+"%"; draw(); }
+function resetView() { zoom = 1; panX = 0; panY = 0; document.getElementById("zoomLbl").textContent = "100%"; draw(); }
+
+function updateStatus() {
+  const nc = arch ? arch.nodes.length : 0;
+  document.getElementById("nodeCount").textContent = nc ? nc + " nodes" : "";
+  document.getElementById("statusText").textContent = arch ? arch.title || "Canvas" : "Ready";
+}
+
+// ═══════════════════════════════════════
+//  API CALLS
+// ═══════════════════════════════════════
+async function generate(prompt) {
+  document.getElementById("loading").classList.remove("hidden");
+  try {
+    const resp = await fetch("/api/generate", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({prompt}),
+    });
+    const data = await resp.json();
+    if (data.error) { alert("Error: " + data.error); return; }
+    arch = data.architecture;
+    pos = arch.positions || {};
+    updateBP();
+    updateStatus();
+    draw();
+  } catch(err) {
+    alert("Error: " + err.message);
+  } finally {
+    document.getElementById("loading").classList.add("hidden");
+  }
+}
+
+function updateBP() {
+  const list = document.getElementById("bpList");
+  list.innerHTML = "";
+  (arch.bestPractices || []).forEach(bp => {
+    const div = document.createElement("div");
+    div.className = "bpcard";
+    div.dataset.c = bp.category || "";
+    div.innerHTML = `<div class="cat">${bp.category||""}</div><div class="tip">${bp.tip||""}</div>`;
+    list.appendChild(div);
+  });
+}
+
+async function exportPPTX() {
+  if (!arch) return alert("Generate an architecture first");
+  const resp = await fetch("/api/export/pptx", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({architecture: arch}),
+  });
+  if (!resp.ok) { alert("Export failed"); return; }
+  const blob = await resp.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "xlarch_architecture.pptx";
+  a.click();
+}
+
+async function exportPNG() {
+  if (!arch) return alert("Generate an architecture first");
+  const resp = await fetch("/api/export/png", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({architecture: arch}),
+  });
+  if (!resp.ok) { alert("Export failed"); return; }
+  const blob = await resp.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "xlarch_architecture.png";
+  a.click();
+}
+
+async function saveArch() {
+  if (!arch) return alert("Nothing to save");
+  const resp = await fetch("/api/save", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({architecture: arch}),
+  });
+  const data = await resp.json();
+  if (data.saved) alert("Saved!");
+  else alert("Error saving");
+}
+
+// ═══════════════════════════════════════
+//  INIT — check for prompt from dashboard
+// ═══════════════════════════════════════
+const params = new URLSearchParams(window.location.search);
+const prompt = params.get("prompt");
+if (prompt) {
+  setTimeout(() => generate(prompt), 100);
+}
+
+setTimeout(resize, 50);
+</script>
+</body>
+</html>
