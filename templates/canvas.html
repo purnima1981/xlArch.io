@@ -189,6 +189,7 @@ let dragging = null, dragOff = {x:0, y:0};
 let isPanning = false, panStart = {x:0, y:0};
 let selectedNode = null;
 let snapLines = []; // active snap guides
+let hoveredNode = null; // node id when hovering near edges
 const imgCache = {};
 
 const cv = document.getElementById("cv");
@@ -346,80 +347,18 @@ function draw() {
     }
   });
 
-  ctx.restore();
-
-  // ── Rulers (drawn on top, in screen space)
-  const RH = 22; // ruler height/width
-  const rulerBg = "#f0f1f3";
-  const rulerLine = "#d0d3d8";
-  const rulerText = "#8a8e96";
-  const tickColor = "#c0c4cc";
-
-  // Calculate ruler intervals based on zoom
-  let step = 50;
-  if (zoom < 0.4) step = 200;
-  else if (zoom < 0.7) step = 100;
-  else if (zoom > 1.5) step = 25;
-
-  // ── Top ruler
-  ctx.save();
-  ctx.fillStyle = rulerBg;
-  ctx.fillRect(0, 0, W, RH);
-  ctx.strokeStyle = rulerLine;
-  ctx.lineWidth = 0.5;
-  ctx.beginPath(); ctx.moveTo(0, RH); ctx.lineTo(W, RH); ctx.stroke();
-
-  ctx.font = "10px system-ui";
-  ctx.fillStyle = rulerText;
-  ctx.textAlign = "center";
-
-  const startX = Math.floor(-panX / step) * step;
-  for (let vx = startX; vx < (-panX + W / zoom); vx += step) {
-    const sx = (vx + panX) * zoom;
-    if (sx < RH || sx > W) continue;
-    // Tick
-    ctx.strokeStyle = tickColor;
-    ctx.beginPath(); ctx.moveTo(sx, RH - 6); ctx.lineTo(sx, RH); ctx.stroke();
-    // Label
-    ctx.fillStyle = rulerText;
-    ctx.fillText(vx, sx, RH - 8);
-    // Minor ticks
-    for (let m = 1; m < 5; m++) {
-      const mx = (vx + m * step / 5 + panX) * zoom;
-      if (mx > RH && mx < W) {
-        ctx.beginPath(); ctx.moveTo(mx, RH - 3); ctx.lineTo(mx, RH); ctx.stroke();
-      }
-    }
+  // ── Hover dots (show connection points on hovered node)
+  const dotNode = hoveredNode || selectedNode;
+  if (dotNode && pos[dotNode]) {
+    const d = getDelta(dotNode);
+    const px = pos[dotNode].x + d.dx, py = pos[dotNode].y + d.dy;
+    // Left dot (input)
+    ctx.fillStyle = "#4285F4";
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(px, py + NH/2, 5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    // Right dot (output)
+    ctx.beginPath(); ctx.arc(px + NW, py + NH/2, 5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
   }
-
-  // ── Left ruler
-  ctx.fillStyle = rulerBg;
-  ctx.fillRect(0, 0, RH, H);
-  ctx.strokeStyle = rulerLine;
-  ctx.beginPath(); ctx.moveTo(RH, 0); ctx.lineTo(RH, H); ctx.stroke();
-
-  ctx.textAlign = "right";
-  const startY = Math.floor(-panY / step) * step;
-  for (let vy = startY; vy < (-panY + H / zoom); vy += step) {
-    const sy = (vy + panY) * zoom;
-    if (sy < RH || sy > H) continue;
-    ctx.strokeStyle = tickColor;
-    ctx.beginPath(); ctx.moveTo(RH - 6, sy); ctx.lineTo(RH, sy); ctx.stroke();
-    ctx.fillStyle = rulerText;
-    ctx.fillText(vy, RH - 8, sy + 3);
-    for (let m = 1; m < 5; m++) {
-      const my = (vy + m * step / 5 + panY) * zoom;
-      if (my > RH && my < H) {
-        ctx.beginPath(); ctx.moveTo(RH - 3, my); ctx.lineTo(RH, my); ctx.stroke();
-      }
-    }
-  }
-
-  // Corner square
-  ctx.fillStyle = rulerBg;
-  ctx.fillRect(0, 0, RH, RH);
-  ctx.strokeStyle = rulerLine;
-  ctx.strokeRect(0, 0, RH, RH);
 
   ctx.restore();
 }
@@ -509,10 +448,12 @@ function hitTestDot(mx, my) {
     if (!p) continue;
     const d = dragDeltas[n.id] || {dx:0, dy:0};
     const px = p.x + d.dx, py = p.y + d.dy;
+    // Right side (output) — wider hit area
     const rx = px + NW, ry = py + NH/2;
-    if (Math.hypot(mx - rx, my - ry) < 8) return {id: n.id, side: "out", x: rx, y: ry};
+    if (Math.hypot(mx - rx, my - ry) < 15) return {id: n.id, side: "out", x: rx, y: ry};
+    // Left side (input)
     const lx = px, ly = py + NH/2;
-    if (Math.hypot(mx - lx, my - ly) < 8) return {id: n.id, side: "in", x: lx, y: ly};
+    if (Math.hypot(mx - lx, my - ly) < 15) return {id: n.id, side: "in", x: lx, y: ly};
   }
   return null;
 }
@@ -644,12 +585,17 @@ cv.addEventListener("mousemove", e => {
     panStart = {x: e.clientX, y: e.clientY};
     draw();
   } else {
-    // Hover: change cursor
+    // Hover: change cursor + track hovered node for dots
     const dot = hitTestDot(mx, my);
-    if (dot) { cv.style.cursor = "crosshair"; }
-    else if (hitTestEdge(mx, my) !== null) { cv.style.cursor = "pointer"; }
-    else if (hitTestNode(mx, my)) { cv.style.cursor = "grab"; }
-    else { cv.style.cursor = "default"; }
+    if (dot) { cv.style.cursor = "crosshair"; hoveredNode = dot.id; draw(); }
+    else {
+      const oldHover = hoveredNode;
+      hoveredNode = hitTestNode(mx, my);
+      if (hitTestEdge(mx, my) !== null) { cv.style.cursor = "pointer"; }
+      else if (hoveredNode) { cv.style.cursor = "grab"; }
+      else { cv.style.cursor = "default"; }
+      if (oldHover !== hoveredNode) draw();
+    }
   }
 });
 
