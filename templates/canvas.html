@@ -129,6 +129,8 @@ canvas{flex:1;cursor:default}
 // ═══════════════════════════════════════
 let arch = null;       // architecture dict
 let pos = {};          // node positions {id: {x,y}}
+let renderCommands = []; // draw commands from server
+let dragDeltas = {};   // {nodeId: {dx, dy}} from dragging
 let zoom = 1, panX = 0, panY = 0;
 let dragging = null, dragOff = {x:0, y:0};
 let isPanning = false, panStart = {x:0, y:0};
@@ -170,7 +172,8 @@ function toCanvas(ex, ey) {
 }
 
 // ═══════════════════════════════════════
-//  PRELOAD ICON IMAGES
+//  DRAW — executes renderCommands from server
+//  Same commands → PPTX. One render, two outputs.
 // ═══════════════════════════════════════
 function preloadIcon(key) {
   if (imgCache[key]) return;
@@ -180,201 +183,114 @@ function preloadIcon(key) {
   imgCache[key] = img;
 }
 
-// ═══════════════════════════════════════
-//  DRAW
-// ═══════════════════════════════════════
+function getDelta(nodeId) {
+  return dragDeltas[nodeId] || {dx: 0, dy: 0};
+}
+
+function getEdgeDelta(fromId, toId) {
+  return {from: getDelta(fromId), to: getDelta(toId)};
+}
+
 function draw() {
   if (!ctx) return;
   ctx.save();
   ctx.clearRect(0, 0, W, H);
 
-  // Background
+  // Background + dot grid (canvas-only cosmetics)
   ctx.fillStyle = "#f8f9fb";
   ctx.fillRect(0, 0, W, H);
-
-  // Dot grid
   ctx.fillStyle = "#e0e0e0";
   const gs = 24;
-  const sx = (-panX * zoom) % gs, sy = (-panY * zoom) % gs;
-  for (let x = -sx; x < W; x += gs / zoom)
-    for (let y = -sy; y < H; y += gs / zoom) {
-      ctx.beginPath(); ctx.arc(x, y, 0.6, 0, Math.PI * 2); ctx.fill();
-    }
+  for (let x = 0; x < W; x += gs) for (let y = 0; y < H; y += gs) {
+    ctx.beginPath(); ctx.arc(x, y, 0.6, 0, Math.PI * 2); ctx.fill();
+  }
 
   ctx.translate(panX * zoom, panY * zoom);
   ctx.scale(zoom, zoom);
 
-  if (!arch || !arch.nodes) { ctx.restore(); return; }
+  // Execute render commands
+  renderCommands.forEach(cmd => {
+    const nid = cmd.nodeId;
+    const d = nid ? getDelta(nid) : {dx: 0, dy: 0};
+    const ox = d.dx, oy = d.dy; // offset from drag
 
-  const zones = arch.zones || [];
-  const lanes = arch.lanes || [];
-  const style = arch.style || {};
-  const zg = ZG;
-  const lg = LG;
-  const lc = {"streaming": "#E8F4FD", "batch": "#EDF7ED", "ml": "#FFF3E0"};
-
-  // Lane backgrounds
-  lanes.forEach((lane, i) => {
-    const y = TP + i * lg - 18;
-    ctx.fillStyle = lc[lane] || "#f5f5f5";
-    ctx.globalAlpha = 0.3;
-    if (ctx.roundRect) {
-      ctx.beginPath(); ctx.roundRect(25, y, zones.length * zg + 40, NH + 50, 8); ctx.fill();
-    } else {
-      ctx.fillRect(25, y, zones.length * zg + 40, NH + 50);
-    }
-    ctx.globalAlpha = 1;
-  });
-
-  // Zone labels
-  ctx.font = "600 9px system-ui";
-  ctx.fillStyle = "#bbb";
-  zones.forEach((z, i) => {
-    ctx.fillText(z.toUpperCase(), LP + i * zg + 20, 55);
-  });
-
-  // Edges — clean orthogonal routing
-  ctx.strokeStyle = "#BDBDBD";
-  ctx.lineWidth = 1;
-  (arch.edges || []).forEach(e => {
-    const fp = pos[e.from], tp = pos[e.to];
-    if (!fp || !tp) return;
-    const x1 = fp.x + NW + 5, y1 = fp.y + NH / 2;  // right dot
-    const x2 = tp.x - 5, y2 = tp.y + NH / 2;        // left dot
-
-    ctx.beginPath();
-    if (Math.abs(y1 - y2) < 5) {
-      // Same lane — straight horizontal
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-    } else {
-      // Different lanes — L-shape: horizontal to midpoint, vertical, horizontal
-      const midX = (x1 + x2) / 2;
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(midX, y1);
-      ctx.lineTo(midX, y2);
-      ctx.lineTo(x2, y2);
-    }
-    ctx.stroke();
-
-    // Arrowhead (always points right)
-    ctx.fillStyle = "#BDBDBD";
-    ctx.beginPath();
-    ctx.moveTo(x2, y2);
-    ctx.lineTo(x2 - 6, y2 - 3.5);
-    ctx.lineTo(x2 - 6, y2 + 3.5);
-    ctx.closePath();
-    ctx.fill();
-  });
-
-  // Nodes
-  arch.nodes.forEach(n => {
-    const p = pos[n.id];
-    if (!p) return;
-
-    // Shadow
-    ctx.fillStyle = "rgba(0,0,0,0.04)";
-    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(p.x+1, p.y+2, NW, NH, 10); ctx.fill(); }
-
-    // Card
-    const isSel = selectedNode === n.id;
-    ctx.fillStyle = "#fff";
-    ctx.strokeStyle = isSel ? "#4285F4" : "#e0e4e8";
-    ctx.lineWidth = isSel ? 2 : 1;
-    if (ctx.roundRect) {
-      ctx.beginPath(); ctx.roundRect(p.x, p.y, NW, NH, 10); ctx.fill(); ctx.stroke();
-    } else {
-      ctx.fillRect(p.x, p.y, NW, NH);
-      ctx.strokeRect(p.x, p.y, NW, NH);
-    }
-
-    // Icon
-    preloadIcon(n.icon);
-    const img = imgCache[n.icon];
-    if (img && img.complete && img.naturalWidth > 0) {
-      ctx.drawImage(img, p.x + (NW - IS) / 2, p.y + 6, IS, IS);
-    }
-
-    // Label
-    ctx.font = "500 9px system-ui";
-    ctx.fillStyle = "#3c4043";
-    ctx.textAlign = "center";
-    ctx.fillText(n.label || "", p.x + NW / 2, p.y + NH - 8);
-    ctx.textAlign = "start";
-
-    // Step badge
-    if (n.step != null) {
-      const bx = p.x + NW - 14, by = p.y - 6;
-      ctx.fillStyle = "#4285F4";
-      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx, by, 20, 16, 4); ctx.fill(); }
-      else { ctx.fillRect(bx, by, 20, 16); }
-      ctx.font = "700 9px system-ui";
-      ctx.fillStyle = "#fff";
-      ctx.textAlign = "center";
-      ctx.fillText(n.step, bx + 10, by + 12);
-      ctx.textAlign = "start";
-    }
-
-    // Connection points (invisible - only for edge creation hit test)
-  });
-
-  // Governance & Security bar
-  if (arch.governance && arch.governance.length > 0) {
-    const gy = TP + lanes.length * lg + GOV_OFF;
-    const bw = zones.length * zg + 40;
-    const gNW = 90, gNH = 72, gIS = 32; // governance node size (slightly smaller than main)
-    const barH = gNH + 35;
-    
-    // Purple dashed box
-    ctx.fillStyle = "#F3E8FD";
-    ctx.globalAlpha = 0.2;
-    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(25, gy - 8, bw, barH, 6); ctx.fill(); }
-    else ctx.fillRect(25, gy - 8, bw, barH);
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = "#A142F4";
-    ctx.lineWidth = 0.5;
-    ctx.setLineDash([6, 3]);
-    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(25, gy - 8, bw, barH, 6); ctx.stroke(); }
-    ctx.setLineDash([]);
-
-    // Label
-    ctx.font = "700 7px system-ui";
-    ctx.fillStyle = "#8430CE";
-    ctx.textAlign = "left";
-    ctx.fillText("GOVERNANCE · SECURITY · OBSERVABILITY", 35, gy + 5);
-
-    // Governance nodes — same card style as main nodes
-    const count = arch.governance.length;
-    const usable = bw - 50;
-    const spacing = usable / Math.max(count, 1);
-    arch.governance.forEach((g, i) => {
-      const gx = 40 + i * spacing;
-      const ny = gy + 14;
-
-      // Card (same style as main nodes)
-      ctx.fillStyle = "rgba(0,0,0,0.02)";
-      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(gx+1, ny+1, gNW, gNH, 8); ctx.fill(); }
-      ctx.fillStyle = "#fff";
-      ctx.strokeStyle = "#e0e4e8";
-      ctx.lineWidth = 1;
-      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(gx, ny, gNW, gNH, 8); ctx.fill(); ctx.stroke(); }
-      else { ctx.fillRect(gx, ny, gNW, gNH); ctx.strokeRect(gx, ny, gNW, gNH); }
-
-      // Icon
-      preloadIcon(g.icon);
-      const img = imgCache[g.icon];
-      if (img && img.complete && img.naturalWidth > 0) {
-        ctx.drawImage(img, gx + (gNW - gIS) / 2, ny + 5, gIS, gIS);
+    if (cmd.type === "rect") {
+      const x = cmd.x + ox, y = cmd.y + oy;
+      if (cmd.opacity) ctx.globalAlpha = cmd.opacity;
+      ctx.fillStyle = cmd.fill;
+      if (ctx.roundRect && cmd.radius) {
+        ctx.beginPath(); ctx.roundRect(x, y, cmd.w, cmd.h, cmd.radius); ctx.fill();
+      } else {
+        ctx.fillRect(x, y, cmd.w, cmd.h);
+      }
+      ctx.globalAlpha = 1;
+      if (cmd.stroke) {
+        ctx.strokeStyle = (nid && nid === selectedNode) ? "#4285F4" : cmd.stroke;
+        ctx.lineWidth = (nid && nid === selectedNode) ? 2 : (cmd.stroke_width || 0.5);
+        if (cmd.dash) ctx.setLineDash([6, 3]);
+        if (ctx.roundRect && cmd.radius) {
+          ctx.beginPath(); ctx.roundRect(x, y, cmd.w, cmd.h, cmd.radius); ctx.stroke();
+        } else {
+          ctx.strokeRect(x, y, cmd.w, cmd.h);
+        }
+        if (cmd.dash) ctx.setLineDash([]);
       }
 
-      // Label
-      ctx.font = "500 8px system-ui";
-      ctx.fillStyle = "#3c4043";
-      ctx.textAlign = "center";
-      ctx.fillText(g.label || "", gx + gNW / 2, ny + gNH - 8);
+    } else if (cmd.type === "image") {
+      preloadIcon(cmd.src);
+      const img = imgCache[cmd.src];
+      if (img && img.complete && img.naturalWidth > 0) {
+        ctx.drawImage(img, cmd.x + ox, cmd.y + oy, cmd.w, cmd.h);
+      }
+
+    } else if (cmd.type === "text") {
+      ctx.font = `${cmd.bold ? "700" : "500"} ${cmd.size}px system-ui`;
+      ctx.fillStyle = cmd.color;
+      ctx.textAlign = cmd.align === "center" ? "center" : "start";
+      const tx = cmd.align === "center" ? cmd.x + ox + cmd.w / 2 : cmd.x + ox;
+      ctx.fillText(cmd.text, tx, cmd.y + oy + cmd.size);
       ctx.textAlign = "start";
-    });
-  }
+
+    } else if (cmd.type === "arrow") {
+      const fd = cmd.fromId ? getDelta(cmd.fromId) : {dx: 0, dy: 0};
+      const td = cmd.toId ? getDelta(cmd.toId) : {dx: 0, dy: 0};
+      const pts = cmd.points;
+      if (pts.length < 2) return;
+
+      // Check if this edge is selected
+      let isSelEdge = false;
+      if (selectedEdge !== null && arch && arch.edges[selectedEdge]) {
+        const se = arch.edges[selectedEdge];
+        isSelEdge = (se.from === cmd.fromId && se.to === cmd.toId);
+      }
+
+      // Offset start points by fromId delta, end points by toId delta
+      const adjusted = pts.map((p, i) => {
+        if (i === 0) return [p[0] + fd.dx, p[1] + fd.dy];
+        if (i === pts.length - 1) return [p[0] + td.dx, p[1] + td.dy];
+        return [p[0] + (fd.dx + td.dx) / 2, p[1] + (fd.dy + td.dy) / 2];
+      });
+
+      ctx.strokeStyle = isSelEdge ? "#EA4335" : (cmd.color || "#9E9E9E");
+      ctx.lineWidth = isSelEdge ? 2.5 : (cmd.width || 1);
+      ctx.beginPath();
+      ctx.moveTo(adjusted[0][0], adjusted[0][1]);
+      for (let i = 1; i < adjusted.length; i++) {
+        ctx.lineTo(adjusted[i][0], adjusted[i][1]);
+      }
+      ctx.stroke();
+
+      // Arrowhead at last point
+      const last = adjusted[adjusted.length - 1];
+      ctx.fillStyle = isSelEdge ? "#EA4335" : (cmd.color || "#9E9E9E");
+      ctx.beginPath();
+      ctx.moveTo(last[0], last[1]);
+      ctx.lineTo(last[0] - 6, last[1] - 3.5);
+      ctx.lineTo(last[0] - 6, last[1] + 3.5);
+      ctx.closePath();
+      ctx.fill();
+    }
+  });
 
   ctx.restore();
 }
@@ -384,19 +300,54 @@ function draw() {
 // ═══════════════════════════════════════
 let connecting = null; // {fromId, startX, startY}
 let connectMouse = null; // {x, y} while drawing edge
+let selectedEdge = null; // index into arch.edges
+
+// Distance from point to line segment
+function distToSegment(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return Math.hypot(px - x1, py - y1);
+  let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
+
+function hitTestEdge(mx, my) {
+  if (!arch || !arch.edges) return null;
+  for (let i = 0; i < arch.edges.length; i++) {
+    const e = arch.edges[i];
+    const fp = pos[e.from], tp = pos[e.to];
+    if (!fp || !tp) continue;
+    const fd = dragDeltas[e.from] || {dx:0, dy:0};
+    const td = dragDeltas[e.to] || {dx:0, dy:0};
+    const x1 = fp.x + fd.dx + NW + 5, y1 = fp.y + fd.dy + NH / 2;
+    const x2 = tp.x + td.dx - 5, y2 = tp.y + td.dy + NH / 2;
+
+    if (Math.abs(y1 - y2) < 5) {
+      // Straight line
+      if (distToSegment(mx, my, x1, y1, x2, y2) < 6) return i;
+    } else {
+      // L-shape — check all 3 segments
+      const midX = (x1 + x2) / 2;
+      if (distToSegment(mx, my, x1, y1, midX, y1) < 6) return i;
+      if (distToSegment(mx, my, midX, y1, midX, y2) < 6) return i;
+      if (distToSegment(mx, my, midX, y2, x2, y2) < 6) return i;
+    }
+  }
+  return null;
+}
 
 function hitTestDot(mx, my) {
-  // Check if mouse is near a connection dot (right side = output, left side = input)
   if (!arch || !arch.nodes) return null;
   for (let i = arch.nodes.length - 1; i >= 0; i--) {
     const n = arch.nodes[i];
     const p = pos[n.id];
     if (!p) continue;
-    // Right dot (output)
-    const rx = p.x + NW, ry = p.y + NH/2;
+    const d = dragDeltas[n.id] || {dx:0, dy:0};
+    const px = p.x + d.dx, py = p.y + d.dy;
+    const rx = px + NW, ry = py + NH/2;
     if (Math.hypot(mx - rx, my - ry) < 8) return {id: n.id, side: "out", x: rx, y: ry};
-    // Left dot (input)
-    const lx = p.x, ly = p.y + NH/2;
+    const lx = px, ly = py + NH/2;
     if (Math.hypot(mx - lx, my - ly) < 8) return {id: n.id, side: "in", x: lx, y: ly};
   }
   return null;
@@ -407,7 +358,10 @@ function hitTestNode(mx, my) {
   for (let i = arch.nodes.length - 1; i >= 0; i--) {
     const n = arch.nodes[i];
     const p = pos[n.id];
-    if (p && mx >= p.x && mx <= p.x + NW && my >= p.y && my <= p.y + NH) return n.id;
+    if (!p) continue;
+    const d = dragDeltas[n.id] || {dx:0, dy:0};
+    const px = p.x + d.dx, py = p.y + d.dy;
+    if (mx >= px && mx <= px + NW && my >= py && my <= py + NH) return n.id;
   }
   return null;
 }
@@ -429,14 +383,26 @@ cv.addEventListener("mousedown", e => {
   if (nodeId) {
     dragging = nodeId;
     selectedNode = nodeId;
-    dragOff = {x: mx - pos[nodeId].x, y: my - pos[nodeId].y};
+    selectedEdge = null;
+    const d = dragDeltas[nodeId] || {dx:0, dy:0};
+    dragOff = {x: mx - (pos[nodeId].x + d.dx), y: my - (pos[nodeId].y + d.dy)};
     cv.style.cursor = "grabbing";
     draw();
     return;
   }
 
-  // 3. Background — deselect + pan
+  // 3. Check if clicked on an edge
+  const edgeIdx = hitTestEdge(mx, my);
+  if (edgeIdx !== null) {
+    selectedEdge = edgeIdx;
+    selectedNode = null;
+    draw();
+    return;
+  }
+
+  // 4. Background — deselect + pan
   selectedNode = null;
+  selectedEdge = null;
   draw();
   isPanning = true;
   panStart = {x: e.clientX, y: e.clientY};
@@ -475,7 +441,9 @@ cv.addEventListener("mousemove", e => {
   }
 
   if (dragging) {
-    pos[dragging] = {x: mx - dragOff.x, y: my - dragOff.y};
+    const newX = mx - dragOff.x;
+    const newY = my - dragOff.y;
+    dragDeltas[dragging] = {dx: newX - pos[dragging].x, dy: newY - pos[dragging].y};
     draw();
   } else if (isPanning) {
     panX += (e.clientX - panStart.x) / zoom;
@@ -483,9 +451,12 @@ cv.addEventListener("mousemove", e => {
     panStart = {x: e.clientX, y: e.clientY};
     draw();
   } else {
-    // Hover: change cursor near dots
+    // Hover: change cursor
     const dot = hitTestDot(mx, my);
-    cv.style.cursor = dot ? "crosshair" : "default";
+    if (dot) { cv.style.cursor = "crosshair"; }
+    else if (hitTestEdge(mx, my) !== null) { cv.style.cursor = "pointer"; }
+    else if (hitTestNode(mx, my)) { cv.style.cursor = "grab"; }
+    else { cv.style.cursor = "default"; }
   }
 });
 
@@ -521,14 +492,37 @@ cv.addEventListener("mouseleave", () => {
 
 // Delete selected node or edge
 document.addEventListener("keydown", e => {
-  if ((e.key === "Delete" || e.key === "Backspace") && selectedNode && arch) {
+  if ((e.key === "Delete" || e.key === "Backspace") && arch) {
     if (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT") return;
-    arch.nodes = arch.nodes.filter(n => n.id !== selectedNode);
-    arch.edges = arch.edges.filter(ed => ed.from !== selectedNode && ed.to !== selectedNode);
-    delete pos[selectedNode];
-    selectedNode = null;
-    updateStatus();
-    draw();
+
+    if (selectedEdge !== null && selectedEdge < arch.edges.length) {
+      arch.edges.splice(selectedEdge, 1);
+      selectedEdge = null;
+      // Re-render to get updated commands
+      fetch("/api/rerender", {method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({architecture: arch})
+      }).then(r => r.json()).then(data => {
+        if (data.renderCommands) { renderCommands = data.renderCommands; }
+        draw();
+      }).catch(() => draw());
+      return;
+    }
+
+    if (selectedNode) {
+      arch.nodes = arch.nodes.filter(n => n.id !== selectedNode);
+      arch.edges = arch.edges.filter(ed => ed.from !== selectedNode && ed.to !== selectedNode);
+      delete pos[selectedNode];
+      delete dragDeltas[selectedNode];
+      selectedNode = null;
+      // Re-render
+      fetch("/api/rerender", {method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({architecture: arch})
+      }).then(r => r.json()).then(data => {
+        if (data.renderCommands) { renderCommands = data.renderCommands; pos = data.positions || pos; }
+        updateStatus();
+        draw();
+      }).catch(() => { updateStatus(); draw(); });
+    }
   }
 });
 
@@ -605,6 +599,8 @@ async function generate(prompt) {
     if (data.error) { alert("Error: " + data.error); return; }
     arch = data.architecture;
     pos = arch.positions || {};
+    renderCommands = data.renderCommands || [];
+    dragDeltas = {};
     updateBP();
     updateStatus();
     draw();
@@ -627,12 +623,29 @@ function updateBP() {
   });
 }
 
+// Apply drag deltas to architecture for export
+function getExportArch() {
+  if (!arch) return null;
+  const exportArch = JSON.parse(JSON.stringify(arch));
+  // Update positions with drag deltas
+  if (exportArch.positions) {
+    Object.keys(dragDeltas).forEach(nid => {
+      if (exportArch.positions[nid]) {
+        exportArch.positions[nid].x += dragDeltas[nid].dx;
+        exportArch.positions[nid].y += dragDeltas[nid].dy;
+      }
+    });
+  }
+  return exportArch;
+}
+
 async function exportPPTX() {
-  if (!arch) return alert("Generate an architecture first");
+  const ex = getExportArch();
+  if (!ex) return alert("Generate an architecture first");
   const resp = await fetch("/api/export/pptx", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({architecture: arch}),
+    body: JSON.stringify({architecture: ex}),
   });
   if (!resp.ok) { alert("Export failed"); return; }
   const blob = await resp.blob();
@@ -643,11 +656,12 @@ async function exportPPTX() {
 }
 
 async function exportPNG() {
-  if (!arch) return alert("Generate an architecture first");
+  const ex = getExportArch();
+  if (!ex) return alert("Generate an architecture first");
   const resp = await fetch("/api/export/png", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({architecture: arch}),
+    body: JSON.stringify({architecture: ex}),
   });
   if (!resp.ok) { alert("Export failed"); return; }
   const blob = await resp.blob();
@@ -681,6 +695,8 @@ async function loadTemplate(templateId) {
     if (data.error) { alert("Error: " + data.error); return; }
     arch = data.architecture;
     pos = arch.positions || {};
+    renderCommands = data.renderCommands || [];
+    dragDeltas = {};
     updateBP();
     updateStatus();
     draw();

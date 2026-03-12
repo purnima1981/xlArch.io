@@ -94,7 +94,7 @@ ZG = 175     # zone gap
 LG = 145     # lane gap
 LP = 70      # left pad
 TP = 90      # top pad
-GOV_OFF = 50 # governance offset below last lane
+GOV_OFF = 15 # governance offset below last lane
 ARROW_COLOR = "#9E9E9E"
 LANE_COLORS = {"streaming": "#E8F4FD", "batch": "#EDF7ED", "ml": "#FFF3E0"}
 
@@ -128,7 +128,7 @@ def compute_layout(architecture):
 def canvas_bounds(architecture):
     zones = architecture.get("zones", DEFAULT_ZONES)
     lanes = architecture.get("lanes", DEFAULT_LANES)
-    return LP + len(zones) * ZG + 60, TP + len(lanes) * LG + GOV_OFF + 100
+    return LP + len(zones) * ZG + 60, TP + len(lanes) * LG + GOV_OFF + 130
 
 
 def new_architecture(title="Untitled"):
@@ -227,141 +227,7 @@ BEST PRACTICES — include 6-10 across these categories:
 """
 
 
-# ═══ PPTX RENDERER ═══
-
-def render_pptx(architecture, output_path):
-    from pptx import Presentation
-    from pptx.util import Inches, Pt
-    from pptx.dml.color import RGBColor
-    from pptx.enum.text import PP_ALIGN
-    from pptx.enum.shapes import MSO_SHAPE
-
-    positions = compute_layout(architecture)
-    cw, ch = canvas_bounds(architecture)
-    zones = architecture.get("zones", DEFAULT_ZONES)
-    lanes = architecture.get("lanes", DEFAULT_LANES)
-
-    # Scale virtual canvas → 13.3" × 7.5" slide
-    margin = 0.35
-    scale = min((13.3 - 2*margin) / cw, (7.5 - 2*margin) / ch)
-    def sx(x): return margin + x * scale
-    def sy(y): return margin + y * scale
-    def sw(v): return v * scale
-
-    prs = Presentation()
-    prs.slide_width = Inches(13.3)
-    prs.slide_height = Inches(7.5)
-    slide = prs.slides.add_slide(prs.slide_layouts[6])
-
-    def rgb(h):
-        h = h.lstrip("#")
-        return RGBColor(int(h[:2],16), int(h[2:4],16), int(h[4:],16))
-
-    def txt(x, y, w, h, text, sz=7, col="3C4043", bold=False, align="center"):
-        tx = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
-        tf = tx.text_frame; tf.word_wrap = True; p = tf.paragraphs[0]
-        p.text = text; p.font.size = Pt(sz); p.font.color.rgb = rgb(col); p.font.bold = bold
-        p.alignment = {"center": PP_ALIGN.CENTER, "left": PP_ALIGN.LEFT}.get(align, PP_ALIGN.CENTER)
-
-    # Title
-    txt(sx(0), 0.12, sw(cw), 0.35, architecture.get("title", ""), sz=14, col="202124", bold=True, align="left")
-
-    # Lane backgrounds
-    for i, lane in enumerate(lanes):
-        ly = TP + i * LG - 18
-        shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE,
-            Inches(sx(25)), Inches(sy(ly)), Inches(sw(len(zones)*ZG+40)), Inches(sw(NH+50)))
-        shape.fill.solid(); shape.fill.fore_color.rgb = rgb(LANE_COLORS.get(lane, "#F5F5F5"))
-        shape.line.fill.background()
-
-    # Zone labels
-    for i, z in enumerate(zones):
-        txt(sx(LP + i*ZG), sy(25), sw(NW), 0.15, z.upper(), sz=6.5, col="BDBDBD", bold=True)
-
-    # Nodes
-    nw_in, nh_in, is_in = sw(NW), sw(NH), sw(IS)
-    for n in architecture.get("nodes", []):
-        p = positions.get(n["id"])
-        if not p: continue
-        px, py = sx(p["x"]), sy(p["y"])
-
-        # Icon
-        ipath = get_icon_path(n.get("icon", ""))
-        if ipath:
-            try: slide.shapes.add_picture(ipath, Inches(px + (nw_in-is_in)/2), Inches(py+0.02), Inches(is_in), Inches(is_in))
-            except: pass
-
-        # Label
-        txt(px-0.03, py+is_in+0.01, nw_in+0.06, 0.22, n.get("label",""), sz=6.5)
-
-        # Step badge
-        if "step" in n:
-            bsz = 0.17
-            s = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE,
-                Inches(px+nw_in-0.01), Inches(py-0.02), Inches(bsz), Inches(bsz))
-            s.fill.solid(); s.fill.fore_color.rgb = rgb("4285F4"); s.line.fill.background()
-            p2 = s.text_frame.paragraphs[0]
-            p2.text = str(n["step"]); p2.font.size = Pt(7)
-            p2.font.color.rgb = RGBColor(255,255,255); p2.font.bold = True
-            p2.alignment = PP_ALIGN.CENTER
-
-    # Edges — orthogonal routing
-    for e in architecture.get("edges", []):
-        fp, tp = positions.get(e["from"]), positions.get(e["to"])
-        if not fp or not tp: continue
-        x1, y1 = fp["x"]+NW, fp["y"]+NH/2
-        x2, y2 = tp["x"], tp["y"]+NH/2
-
-        if abs(y1 - y2) < 5:
-            # Same lane — straight
-            conn = slide.shapes.add_connector(1,
-                Inches(sx(x1)), Inches(sy(y1)), Inches(sx(x2)), Inches(sy(y2)))
-            conn.line.color.rgb = rgb(ARROW_COLOR); conn.line.width = Pt(0.75)
-        else:
-            # Cross-lane — draw 3 segments (H, V, H)
-            midX = (x1 + x2) / 2
-            for (ax, ay, bx, by) in [(x1,y1,midX,y1), (midX,y1,midX,y2), (midX,y2,x2,y2)]:
-                c = slide.shapes.add_connector(1,
-                    Inches(sx(ax)), Inches(sy(ay)), Inches(sx(bx)), Inches(sy(by)))
-                c.line.color.rgb = rgb(ARROW_COLOR); c.line.width = Pt(0.75)
-
-    # Governance bar — same card style as main nodes
-    gov = architecture.get("governance", [])
-    if gov:
-        gy = TP + len(lanes)*LG + GOV_OFF
-        bw = len(zones)*ZG + 40
-        gNW, gNH, gIS = 90, 72, 32  # governance node dimensions
-        barH = gNH + 35
-
-        s = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE,
-            Inches(sx(25)), Inches(sy(gy-8)), Inches(sw(bw)), Inches(sw(barH)))
-        s.fill.solid(); s.fill.fore_color.rgb = rgb("F3E8FD")
-        s.line.color.rgb = rgb("A142F4"); s.line.width = Pt(0.3)
-
-        txt(sx(35), sy(gy-3), sw(300), 0.12, "GOVERNANCE · SECURITY · OBSERVABILITY", sz=5, col="8430CE", bold=True, align="left")
-
-        usable = bw - 50
-        spacing = usable / max(len(gov), 1)
-        for i, g in enumerate(gov):
-            gx = 40 + i * spacing
-            npx, npy = sx(gx), sy(gy + 14)
-            gnw_in, gnh_in, gis_in = sw(gNW), sw(gNH), sw(gIS)
-
-            # Icon
-            ipath = get_icon_path(g.get("icon",""))
-            if ipath:
-                try:
-                    slide.shapes.add_picture(ipath,
-                        Inches(npx + (gnw_in - gis_in)/2), Inches(npy + 0.02),
-                        Inches(gis_in), Inches(gis_in))
-                except: pass
-
-            # Label
-            txt(npx - 0.02, npy + gis_in + 0.01, gnw_in + 0.04, 0.18, g.get("label",""), sz=5.5)
-
-    prs.save(output_path)
-    return output_path
-
+# PPTX rendering moved to renderer.py — single render, multiple outputs
 
 # ═══ PNG RENDERER ═══
 

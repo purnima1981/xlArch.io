@@ -18,8 +18,9 @@ import httpx
 
 from engine import (
     compute_layout, new_architecture, SYSTEM_PROMPT, CATALOG,
-    get_all_icon_keys, render_pptx, render_png,
+    get_all_icon_keys, render_png,
 )
+from renderer import render, commands_to_pptx, commands_to_canvas_js
 from templates_ref import TEMPLATES
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -238,8 +239,9 @@ async def get_template(template_id: str):
     if not t:
         return JSONResponse({"error": "Template not found"}, status_code=404)
     arch = dict(t["data"])
-    arch["positions"] = compute_layout(arch)
-    return {"architecture": arch}
+    render_result = render(arch)
+    arch["positions"] = render_result["positions"]
+    return {"architecture": arch, "renderCommands": render_result["commands"]}
 
 # ── Canvas Page ───────────────────────────────────────
 
@@ -303,11 +305,11 @@ async def generate(request: Request):
         except Exception:
             return JSONResponse({"error": "Failed to parse architecture", "raw": raw[:500]}, status_code=422)
 
-    # Compute layout
-    positions = compute_layout(architecture)
-    architecture["positions"] = positions
+    # Render — ONE function, used by canvas AND pptx
+    render_result = render(architecture)
+    architecture["positions"] = render_result["positions"]
 
-    return {"architecture": architecture}
+    return {"architecture": architecture, "renderCommands": render_result["commands"]}
 
 # ── Update Positions (from canvas drag) ───────────────
 
@@ -317,8 +319,18 @@ async def update_positions(request: Request):
     if not user:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
     body = await request.json()
-    # Just acknowledge - positions live in browser state
     return {"ok": True}
+
+# ── Re-render (after node/edge changes) ───────────────
+
+@app.post("/api/rerender")
+async def rerender(request: Request):
+    body = await request.json()
+    arch = body.get("architecture")
+    if not arch:
+        return JSONResponse({"error": "No architecture"}, status_code=400)
+    render_result = render(arch)
+    return {"renderCommands": render_result["commands"], "positions": render_result["positions"]}
 
 # ── Export PPTX ───────────────────────────────────────
 
@@ -335,7 +347,8 @@ async def export_pptx(request: Request):
 
     path = os.path.join(tempfile.gettempdir(), f"xlarch_{uuid.uuid4().hex[:8]}.pptx")
     try:
-        render_pptx(arch, path)
+        render_result = render(arch)
+        commands_to_pptx(render_result, path)
         return FileResponse(path, filename="xlarch_architecture.pptx",
                           media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation")
     except Exception as e:
@@ -423,8 +436,9 @@ async def get_arch(arch_id: str, request: Request):
         return JSONResponse({"error": "Not found"}, status_code=404)
 
     arch = row["data"] if isinstance(row["data"], dict) else json.loads(row["data"])
-    arch["positions"] = compute_layout(arch)
-    return {"architecture": arch}
+    render_result = render(arch)
+    arch["positions"] = render_result["positions"]
+    return {"architecture": arch, "renderCommands": render_result["commands"]}
 
 # ── Run ───────────────────────────────────────────────
 
