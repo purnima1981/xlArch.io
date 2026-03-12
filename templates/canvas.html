@@ -188,6 +188,7 @@ let zoom = 1, panX = 0, panY = 0;
 let dragging = null, dragOff = {x:0, y:0};
 let isPanning = false, panStart = {x:0, y:0};
 let selectedNode = null;
+let snapLines = []; // active snap guides
 const imgCache = {};
 
 const cv = document.getElementById("cv");
@@ -424,6 +425,41 @@ function draw() {
 }
 
 // ═══════════════════════════════════════
+//  SNAP LINES — blue dashed alignment guides
+// ═══════════════════════════════════════
+function drawSnapLines() {
+  if (!snapLines.length) return;
+  ctx.save();
+  ctx.translate(panX * zoom, panY * zoom);
+  ctx.scale(zoom, zoom);
+  ctx.strokeStyle = "#4285F4";
+  ctx.lineWidth = 0.7;
+  ctx.setLineDash([4, 3]);
+  ctx.globalAlpha = 0.7;
+
+  // Get visible bounds in canvas coords
+  const vw = W / zoom, vh = H / zoom;
+
+  snapLines.forEach(s => {
+    ctx.beginPath();
+    if (s.axis === "h") {
+      // Horizontal line across full width
+      ctx.moveTo(-panX, s.v);
+      ctx.lineTo(-panX + vw, s.v);
+    } else {
+      // Vertical line across full height
+      ctx.moveTo(s.v, -panY);
+      ctx.lineTo(s.v, -panY + vh);
+    }
+    ctx.stroke();
+  });
+
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════
 //  INTERACTION — drag nodes + draw edges
 // ═══════════════════════════════════════
 let connecting = null; // {fromId, startX, startY}
@@ -569,10 +605,39 @@ cv.addEventListener("mousemove", e => {
   }
 
   if (dragging) {
-    const newX = mx - dragOff.x;
-    const newY = my - dragOff.y;
+    let newX = mx - dragOff.x;
+    let newY = my - dragOff.y;
+    const SNAP = 5; // snap threshold in canvas pixels
+    snapLines = []; // reset
+
+    // Check alignment with all other nodes
+    if (arch && arch.nodes) {
+      const draggedCX = newX + NW / 2, draggedCY = newY + NH / 2;
+      const draggedR = newX + NW, draggedB = newY + NH;
+
+      arch.nodes.forEach(n => {
+        if (n.id === dragging) return;
+        const p2 = pos[n.id];
+        if (!p2) return;
+        const d2 = dragDeltas[n.id] || {dx: 0, dy: 0};
+        const ox = p2.x + d2.dx, oy = p2.y + d2.dy;
+        const cx = ox + NW / 2, cy = oy + NH / 2;
+
+        // Horizontal alignment (Y matches)
+        if (Math.abs(newY - oy) < SNAP) { newY = oy; snapLines.push({axis: "h", v: oy + NH / 2}); }
+        if (Math.abs(draggedCY - cy) < SNAP) { newY = oy; snapLines.push({axis: "h", v: cy}); }
+        if (Math.abs(draggedB - (oy + NH)) < SNAP) { newY = oy; snapLines.push({axis: "h", v: oy + NH}); }
+
+        // Vertical alignment (X matches)
+        if (Math.abs(newX - ox) < SNAP) { newX = ox; snapLines.push({axis: "v", v: ox + NW / 2}); }
+        if (Math.abs(draggedCX - cx) < SNAP) { newX = ox; snapLines.push({axis: "v", v: cx}); }
+        if (Math.abs(draggedR - (ox + NW)) < SNAP) { newX = ox; snapLines.push({axis: "v", v: ox + NW}); }
+      });
+    }
+
     dragDeltas[dragging] = {dx: newX - pos[dragging].x, dy: newY - pos[dragging].y};
     draw();
+    drawSnapLines();
   } else if (isPanning) {
     panX += (e.clientX - panStart.x) / zoom;
     panY += (e.clientY - panStart.y) / zoom;
@@ -610,12 +675,16 @@ cv.addEventListener("mouseup", e => {
   }
   dragging = null;
   isPanning = false;
+  snapLines = [];
   cv.style.cursor = "default";
+  draw();
 });
 
 cv.addEventListener("mouseleave", () => {
   dragging = null; isPanning = false; connecting = null; connectMouse = null;
+  snapLines = [];
   cv.style.cursor = "default";
+  draw();
 });
 
 // Delete selected node or edge
