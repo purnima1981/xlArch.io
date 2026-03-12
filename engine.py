@@ -164,20 +164,64 @@ FORMAT:
     ],
     "governance": [
         {"icon": "iam", "label": "Cloud IAM"},
+        {"icon": "kms", "label": "Encryption (CMEK)"},
+        {"icon": "monitoring", "label": "Monitoring"},
+        {"icon": "logging", "label": "Logging & Audit"},
+        {"icon": "firewall", "label": "VPC-SC / Blast Radius"},
+        {"icon": "dns", "label": "Private Connectivity"},
     ],
     "bestPractices": [
-        {"category": "SECURITY", "tip": "Enable CMEK encryption"},
+        {"category": "SECURITY", "tip": "..."},
     ],
 }
 
-RULES:
-- 8-18 nodes
+═══════════════════════════════════════
+NON-NEGOTIABLE — EVERY architecture MUST include these in governance:
+═══════════════════════════════════════
+
+1. IDENTITY & ACCESS
+   - Cloud IAM (icon: iam) — least privilege, service accounts, Workload Identity
+   - Authentication & Authorization flow must be shown or referenced
+
+2. ENCRYPTION
+   - Cloud KMS (icon: kms) — CMEK for all data at rest
+   - TLS/mTLS for all data in transit
+
+3. NETWORK SECURITY
+   - VPC Service Controls / blast radius isolation (icon: firewall)
+   - Private connectivity — Private Service Connect, VPC peering, no public endpoints (icon: dns)
+   - Interconnect for hybrid connectivity if applicable
+
+4. OBSERVABILITY
+   - Cloud Monitoring (icon: monitoring) — metrics, dashboards, SLOs
+   - Cloud Logging (icon: logging) — audit logs, access transparency, log sinks
+   - Alerting policies on all critical services
+
+5. DATA GOVERNANCE
+   - Data Catalog / Dataplex (icon: data_catalog) — metadata, lineage, classification
+   - DLP for PII detection where applicable
+
+ALL of the above MUST appear in the "governance" array. Never skip them.
+
+═══════════════════════════════════════
+ARCHITECTURE RULES:
+═══════════════════════════════════════
+
+- 10-18 nodes in the main architecture
 - Number steps 1-N in data flow order
-- Include governance: IAM, monitoring minimum
-- 4-8 best practices across SECURITY, RELIABILITY, COST, PERFORMANCE
+- Every edge represents a real data flow — show HOW data moves
 - Use only icon IDs from the available list
 - Each node in exactly one zone and one lane
-- Connect: sources→ingest→process→store→analyze→serve
+- Connect logically: sources → ingest → process → store → analyze → serve
+- Show cross-lane connections where data flows between streaming/batch/ml paths
+
+BEST PRACTICES — include 6-10 across these categories:
+- SECURITY: IAM least privilege, CMEK, VPC-SC, no public endpoints, service account keys rotation
+- NETWORK: Private Service Connect, dedicated interconnect, firewall rules, DNS peering
+- RELIABILITY: multi-region, auto-scaling, dead letter queues, retry policies, HA configurations
+- COST: committed use discounts, autoscaling to zero, lifecycle policies, slot reservations
+- PERFORMANCE: caching, partitioning, pre-splitting, streaming engine, connection pooling
+- COMPLIANCE: audit logging, access transparency, data residency, retention policies
 """
 
 
@@ -285,21 +329,24 @@ def render_pptx(architecture, output_path):
         gy = TP + len(lanes)*LG + GOV_OFF
         bw = len(zones)*ZG + 40
         s = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE,
-            Inches(sx(25)), Inches(sy(gy-8)), Inches(sw(bw)), Inches(sw(75)))
+            Inches(sx(25)), Inches(sy(gy-8)), Inches(sw(bw)), Inches(sw(80)))
         s.fill.solid(); s.fill.fore_color.rgb = rgb("F3E8FD")
         s.line.color.rgb = rgb("A142F4"); s.line.width = Pt(0.3)
 
-        txt(sx(35), sy(gy-3), sw(180), 0.12, "GOVERNANCE & SECURITY", sz=5, col="8430CE", bold=True, align="left")
+        txt(sx(35), sy(gy-3), sw(300), 0.12, "GOVERNANCE · SECURITY · OBSERVABILITY", sz=5, col="8430CE", bold=True, align="left")
 
-        gis = sw(30)
-        spacing = bw / max(len(gov)+1, 1)
+        gis = sw(24)
+        usable = bw - 60
+        spacing = usable / max(len(gov), 1)
         for i, g in enumerate(gov):
-            gx = 40 + (i+0.5) * spacing
+            gx = 45 + i * spacing
             ipath = get_icon_path(g.get("icon",""))
             if ipath:
                 try: slide.shapes.add_picture(ipath, Inches(sx(gx)), Inches(sy(gy+12)), Inches(gis), Inches(gis))
                 except: pass
-            txt(sx(gx)-0.08, sy(gy+12)+gis+0.01, gis+0.16, 0.12, g.get("label",""), sz=5, col="5F6368")
+            label = g.get("label","")
+            if len(label) > 16: label = label[:14] + "…"
+            txt(sx(gx)-0.06, sy(gy+12)+gis+0.01, gis+0.12, 0.12, label, sz=4.5, col="5F6368")
 
     prs.save(output_path)
     return output_path

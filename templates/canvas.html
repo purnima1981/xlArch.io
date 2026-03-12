@@ -62,7 +62,7 @@ canvas{flex:1;cursor:default}
 
 <!-- Top bar -->
 <div class="top">
-  <a href="/app" style="font-size:16px;font-weight:800;color:#fff;text-decoration:none;letter-spacing:-0.3px">Xl<span style="color:#555">Arch</span></a>
+  <a href="/app"><img src="/static/logo-white.png" alt="XlArch" style="height:20px"></a>
   <div class="sp"></div>
   <button class="tbtn" onclick="toggleSidebar()" id="sidebarBtn">Services</button>
   <button class="tbtn" onclick="toggleBP()" id="bpBtn">Practices</button>
@@ -318,42 +318,47 @@ function draw() {
     // Connection points (invisible - only for edge creation hit test)
   });
 
-  // Governance bar
+  // Governance & Security bar
   if (arch.governance && arch.governance.length > 0) {
     const gy = TP + lanes.length * lg + GOV_OFF;
     const bw = zones.length * zg + 40;
+    const barH = 80;
     
     // Purple dashed box
     ctx.fillStyle = "#F3E8FD";
-    ctx.globalAlpha = 0.3;
-    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(25, gy - 8, bw, 75, 6); ctx.fill(); }
-    else ctx.fillRect(25, gy - 8, bw, 75);
+    ctx.globalAlpha = 0.25;
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(25, gy - 8, bw, barH, 6); ctx.fill(); }
+    else ctx.fillRect(25, gy - 8, bw, barH);
     ctx.globalAlpha = 1;
     ctx.strokeStyle = "#A142F4";
     ctx.lineWidth = 0.5;
     ctx.setLineDash([6, 3]);
-    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(25, gy - 8, bw, 75, 6); ctx.stroke(); }
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(25, gy - 8, bw, barH, 6); ctx.stroke(); }
     ctx.setLineDash([]);
 
     // Label
-    ctx.font = "700 8px system-ui";
+    ctx.font = "700 7px system-ui";
     ctx.fillStyle = "#8430CE";
-    ctx.fillText("GOVERNANCE & SECURITY", 35, gy + 6);
+    ctx.textAlign = "left";
+    ctx.fillText("GOVERNANCE · SECURITY · OBSERVABILITY", 35, gy + 5);
 
-    // Icons
-    const gis = 28;
-    const spacing = bw / (arch.governance.length + 1);
+    // Icons — evenly spaced
+    const gis = 24;
+    const count = arch.governance.length;
+    const usable = bw - 60;
+    const spacing = usable / Math.max(count, 1);
     arch.governance.forEach((g, i) => {
-      const gx = 40 + (i + 0.5) * spacing;
+      const gx = 45 + i * spacing;
       preloadIcon(g.icon);
       const img = imgCache[g.icon];
       if (img && img.complete && img.naturalWidth > 0) {
-        ctx.drawImage(img, gx, gy + 15, gis, gis);
+        ctx.drawImage(img, gx, gy + 14, gis, gis);
       }
-      ctx.font = "500 8px system-ui";
-      ctx.fillStyle = "#666";
+      ctx.font = "500 7px system-ui";
+      ctx.fillStyle = "#777";
       ctx.textAlign = "center";
-      ctx.fillText(g.label || "", gx + gis/2, gy + 15 + gis + 10);
+      const label = (g.label || "").length > 16 ? (g.label || "").substring(0, 14) + "…" : (g.label || "");
+      ctx.fillText(label, gx + gis/2, gy + 14 + gis + 10);
       ctx.textAlign = "start";
     });
   }
