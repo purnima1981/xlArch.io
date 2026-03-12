@@ -322,11 +322,12 @@ function draw() {
   if (arch.governance && arch.governance.length > 0) {
     const gy = TP + lanes.length * lg + GOV_OFF;
     const bw = zones.length * zg + 40;
-    const barH = 80;
+    const gNW = 90, gNH = 72, gIS = 32; // governance node size (slightly smaller than main)
+    const barH = gNH + 35;
     
     // Purple dashed box
     ctx.fillStyle = "#F3E8FD";
-    ctx.globalAlpha = 0.25;
+    ctx.globalAlpha = 0.2;
     if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(25, gy - 8, bw, barH, 6); ctx.fill(); }
     else ctx.fillRect(25, gy - 8, bw, barH);
     ctx.globalAlpha = 1;
@@ -342,23 +343,35 @@ function draw() {
     ctx.textAlign = "left";
     ctx.fillText("GOVERNANCE · SECURITY · OBSERVABILITY", 35, gy + 5);
 
-    // Icons — evenly spaced
-    const gis = 24;
+    // Governance nodes — same card style as main nodes
     const count = arch.governance.length;
-    const usable = bw - 60;
+    const usable = bw - 50;
     const spacing = usable / Math.max(count, 1);
     arch.governance.forEach((g, i) => {
-      const gx = 45 + i * spacing;
+      const gx = 40 + i * spacing;
+      const ny = gy + 14;
+
+      // Card (same style as main nodes)
+      ctx.fillStyle = "rgba(0,0,0,0.02)";
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(gx+1, ny+1, gNW, gNH, 8); ctx.fill(); }
+      ctx.fillStyle = "#fff";
+      ctx.strokeStyle = "#e0e4e8";
+      ctx.lineWidth = 1;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(gx, ny, gNW, gNH, 8); ctx.fill(); ctx.stroke(); }
+      else { ctx.fillRect(gx, ny, gNW, gNH); ctx.strokeRect(gx, ny, gNW, gNH); }
+
+      // Icon
       preloadIcon(g.icon);
       const img = imgCache[g.icon];
       if (img && img.complete && img.naturalWidth > 0) {
-        ctx.drawImage(img, gx, gy + 14, gis, gis);
+        ctx.drawImage(img, gx + (gNW - gIS) / 2, ny + 5, gIS, gIS);
       }
-      ctx.font = "500 7px system-ui";
-      ctx.fillStyle = "#777";
+
+      // Label
+      ctx.font = "500 8px system-ui";
+      ctx.fillStyle = "#3c4043";
       ctx.textAlign = "center";
-      const label = (g.label || "").length > 16 ? (g.label || "").substring(0, 14) + "…" : (g.label || "");
-      ctx.fillText(label, gx + gis/2, gy + 14 + gis + 10);
+      ctx.fillText(g.label || "", gx + gNW / 2, ny + gNH - 8);
       ctx.textAlign = "start";
     });
   }
@@ -657,11 +670,36 @@ async function saveArch() {
 }
 
 // ═══════════════════════════════════════
-//  INIT — check for prompt from dashboard
+//  LOAD TEMPLATE
+// ═══════════════════════════════════════
+async function loadTemplate(templateId) {
+  document.getElementById("loading").classList.remove("hidden");
+  document.querySelector("#loading p").textContent = "Loading reference architecture...";
+  try {
+    const resp = await fetch("/api/templates/" + templateId);
+    const data = await resp.json();
+    if (data.error) { alert("Error: " + data.error); return; }
+    arch = data.architecture;
+    pos = arch.positions || {};
+    updateBP();
+    updateStatus();
+    draw();
+  } catch(err) {
+    alert("Error: " + err.message);
+  } finally {
+    document.getElementById("loading").classList.add("hidden");
+  }
+}
+
+// ═══════════════════════════════════════
+//  INIT — check for prompt or template
 // ═══════════════════════════════════════
 const params = new URLSearchParams(window.location.search);
 const prompt = params.get("prompt");
-if (prompt) {
+const templateId = params.get("template");
+if (templateId) {
+  setTimeout(() => loadTemplate(templateId), 100);
+} else if (prompt) {
   setTimeout(() => generate(prompt), 100);
 }
 

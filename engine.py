@@ -29,7 +29,7 @@ CATALOG = {
         {"id": "composer", "label": "Composer", "icon": "composer"},
         {"id": "looker", "label": "Looker", "icon": "looker"},
         {"id": "dataproc", "label": "Dataproc", "icon": "dataproc"},
-        {"id": "data_catalog", "label": "Data Catalog", "icon": "data_catalog"},
+        {"id": "dataplex", "label": "Dataplex", "icon": "dataplex"},
     ],
     "GCP Storage & DB": [
         {"id": "gcs", "label": "Cloud Storage", "icon": "gcs"},
@@ -163,12 +163,13 @@ FORMAT:
         {"from": "id1", "to": "id2"},
     ],
     "governance": [
-        {"icon": "iam", "label": "Cloud IAM"},
-        {"icon": "kms", "label": "Encryption (CMEK)"},
+        {"icon": "iam", "label": "IAM"},
+        {"icon": "kms", "label": "KMS / CMEK"},
         {"icon": "monitoring", "label": "Monitoring"},
-        {"icon": "logging", "label": "Logging & Audit"},
-        {"icon": "firewall", "label": "VPC-SC / Blast Radius"},
-        {"icon": "dns", "label": "Private Connectivity"},
+        {"icon": "logging", "label": "Audit Logs"},
+        {"icon": "firewall", "label": "VPC-SC"},
+        {"icon": "dns", "label": "Private Connect"},
+        {"icon": "dataplex", "label": "Dataplex"},
     ],
     "bestPractices": [
         {"category": "SECURITY", "tip": "..."},
@@ -198,10 +199,11 @@ NON-NEGOTIABLE — EVERY architecture MUST include these in governance:
    - Alerting policies on all critical services
 
 5. DATA GOVERNANCE
-   - Data Catalog / Dataplex (icon: data_catalog) — metadata, lineage, classification
+   - Dataplex (icon: dataplex) — metadata, lineage, classification
    - DLP for PII detection where applicable
 
 ALL of the above MUST appear in the "governance" array. Never skip them.
+GOVERNANCE LABELS MUST BE SHORT — max 15 characters. Use: "IAM", "KMS / CMEK", "Monitoring", "Audit Logs", "VPC-SC", "Private Connect", "Dataplex". Never long descriptions.
 
 ═══════════════════════════════════════
 ARCHITECTURE RULES:
@@ -323,30 +325,39 @@ def render_pptx(architecture, output_path):
                     Inches(sx(ax)), Inches(sy(ay)), Inches(sx(bx)), Inches(sy(by)))
                 c.line.color.rgb = rgb(ARROW_COLOR); c.line.width = Pt(0.75)
 
-    # Governance bar
+    # Governance bar — same card style as main nodes
     gov = architecture.get("governance", [])
     if gov:
         gy = TP + len(lanes)*LG + GOV_OFF
         bw = len(zones)*ZG + 40
+        gNW, gNH, gIS = 90, 72, 32  # governance node dimensions
+        barH = gNH + 35
+
         s = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE,
-            Inches(sx(25)), Inches(sy(gy-8)), Inches(sw(bw)), Inches(sw(80)))
+            Inches(sx(25)), Inches(sy(gy-8)), Inches(sw(bw)), Inches(sw(barH)))
         s.fill.solid(); s.fill.fore_color.rgb = rgb("F3E8FD")
         s.line.color.rgb = rgb("A142F4"); s.line.width = Pt(0.3)
 
         txt(sx(35), sy(gy-3), sw(300), 0.12, "GOVERNANCE · SECURITY · OBSERVABILITY", sz=5, col="8430CE", bold=True, align="left")
 
-        gis = sw(24)
-        usable = bw - 60
+        usable = bw - 50
         spacing = usable / max(len(gov), 1)
         for i, g in enumerate(gov):
-            gx = 45 + i * spacing
+            gx = 40 + i * spacing
+            npx, npy = sx(gx), sy(gy + 14)
+            gnw_in, gnh_in, gis_in = sw(gNW), sw(gNH), sw(gIS)
+
+            # Icon
             ipath = get_icon_path(g.get("icon",""))
             if ipath:
-                try: slide.shapes.add_picture(ipath, Inches(sx(gx)), Inches(sy(gy+12)), Inches(gis), Inches(gis))
+                try:
+                    slide.shapes.add_picture(ipath,
+                        Inches(npx + (gnw_in - gis_in)/2), Inches(npy + 0.02),
+                        Inches(gis_in), Inches(gis_in))
                 except: pass
-            label = g.get("label","")
-            if len(label) > 16: label = label[:14] + "…"
-            txt(sx(gx)-0.06, sy(gy+12)+gis+0.01, gis+0.12, 0.12, label, sz=4.5, col="5F6368")
+
+            # Label
+            txt(npx - 0.02, npy + gis_in + 0.01, gnw_in + 0.04, 0.18, g.get("label",""), sz=5.5)
 
     prs.save(output_path)
     return output_path

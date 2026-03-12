@@ -30,6 +30,8 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#0e0e0e;color:#dd
 .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:18px}
 .chip{padding:8px 16px;font-size:12px;background:transparent;border:1px solid #2a2a2a;border-radius:8px;color:#555;cursor:pointer;font-family:inherit}
 .chip:hover{border-color:#444;color:#888}
+.chip.ref{border-color:#333;color:#999;font-weight:500}
+.chip.ref:hover{border-color:#666;color:#fff;background:#1a1a1a}
 .status{height:28px;background:#080808;border-top:1px solid #1e1e1e;display:flex;align-items:center;padding:0 14px;font-size:10px;color:#333;gap:12px}
 .dot{width:5px;height:5px;border-radius:50%;background:#3a3}
 </style>
@@ -53,12 +55,20 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#0e0e0e;color:#dd
       <textarea id="prompt" placeholder="e.g. Real-time fraud detection system that ingests transactions, runs ML inference, stores results, and alerts on suspicious activity..."></textarea>
       <button onclick="generate()">Generate →</button>
     </div>
+
+    <div style="margin-top:28px;margin-bottom:8px;font-size:10px;color:#555;text-transform:uppercase;letter-spacing:1.5px">Reference Architectures</div>
+    <div class="chips">
+      <button class="chip ref" onclick="loadTemplate('network')">⛓ Network & Connectivity</button>
+      <button class="chip ref" onclick="loadTemplate('security')">🛡 Security & Compliance</button>
+      <button class="chip ref" onclick="loadTemplate('data_analytics')">📊 Data Analytics</button>
+      <button class="chip ref" onclick="loadTemplate('medallion')">🏅 Medallion Pattern</button>
+    </div>
+
+    <div style="margin-top:16px;margin-bottom:8px;font-size:10px;color:#555;text-transform:uppercase;letter-spacing:1.5px">Or describe your system</div>
     <div class="chips">
       <button class="chip" onclick="fill('Real-time analytics pipeline with streaming and batch processing')">Real-time Analytics</button>
-      <button class="chip" onclick="fill('MLOps platform with feature store, model registry, and monitoring')">MLOps Platform</button>
+      <button class="chip" onclick="fill('MLOps platform with feature store and model monitoring')">MLOps Platform</button>
       <button class="chip" onclick="fill('Event-driven microservices with async messaging')">Event-Driven</button>
-      <button class="chip" onclick="fill('Data lakehouse with medallion architecture')">Data Lakehouse</button>
-      <button class="chip" onclick="fill('Microservices with service mesh and observability')">Microservices</button>
       <button class="chip" onclick="fill('IoT telemetry pipeline with real-time alerting')">IoT Pipeline</button>
     </div>
   </div>
@@ -77,6 +87,9 @@ function fill(t) { p.value = t; p.focus(); }
 function generate() {
   if (!p.value.trim()) return;
   window.location.href = "/canvas?prompt=" + encodeURIComponent(p.value.trim());
+}
+function loadTemplate(id) {
+  window.location.href = "/canvas?template=" + id;
 }
 p.addEventListener("keydown", e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) generate(); });
 </script>

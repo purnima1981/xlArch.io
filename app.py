@@ -20,6 +20,7 @@ from engine import (
     compute_layout, new_architecture, SYSTEM_PROMPT, CATALOG,
     get_all_icon_keys, render_pptx, render_png,
 )
+from templates_ref import TEMPLATES
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
@@ -224,6 +225,21 @@ async def me(request: Request):
 @app.get("/health")
 async def health():
     return {"status": "ok", "version": "0.1.0"}
+
+# ── Templates API ─────────────────────────────────────
+
+@app.get("/api/templates")
+async def list_templates():
+    return {"templates": {k: {"name": v["name"], "description": v["description"]} for k, v in TEMPLATES.items()}}
+
+@app.get("/api/templates/{template_id}")
+async def get_template(template_id: str):
+    t = TEMPLATES.get(template_id)
+    if not t:
+        return JSONResponse({"error": "Template not found"}, status_code=404)
+    arch = dict(t["data"])
+    arch["positions"] = compute_layout(arch)
+    return {"architecture": arch}
 
 # ── Canvas Page ───────────────────────────────────────
 
