@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <link rel="icon" href="/static/favicon.ico?v=2">
+<link rel="icon" type="image/png" href="/static/favicon.png?v=2">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>XlArch — Canvas</title>
+<title>XlArch</title>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui,-apple-system,sans-serif;background:#0e0e0e;color:#ddd;height:100vh;display:flex;flex-direction:column;overflow:hidden}
@@ -13,16 +14,17 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#0e0e0e;color:#dd
 .top{height:48px;background:#080808;border-bottom:1px solid #1e1e1e;display:flex;align-items:center;padding:0 16px;gap:10px;flex-shrink:0}
 .top img{height:22px}
 .sp{flex:1}
-.tbtn{padding:5px 14px;font-size:11px;background:#161616;border:1px solid #2a2a2a;border-radius:6px;color:#888;cursor:pointer;font-family:inherit}
+.tbtn{padding:5px 14px;font-size:11px;background:#161616;border:1px solid #2a2a2a;border-radius:6px;color:#888;cursor:pointer;font-family:inherit;white-space:nowrap}
 .tbtn:hover{border-color:#444;color:#ccc}
 .tbtn.act{background:#1a3a1a;border-color:#3a3;color:#6d6}
 .avatar{width:28px;height:28px;border-radius:50%;background:#1a1a1a;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:11px;color:#666;border:1px solid #2a2a2a}
 .uname{font-size:11px;color:#444}
+.sep{color:#222}
 
 /* Main layout */
-.main{flex:1;display:flex;overflow:hidden}
+.main{flex:1;display:flex;overflow:hidden;position:relative}
 
-/* Sidebar */
+/* Left sidebar */
 .sidebar{width:220px;background:#0a0a0a;border-right:1px solid #1e1e1e;display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
 .sidebar.hidden{display:none}
 .stitle{font-size:9px;color:#555;text-transform:uppercase;letter-spacing:1.5px;padding:12px 14px 6px}
@@ -32,26 +34,51 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#0e0e0e;color:#dd
 .sitem img{width:22px;height:22px}
 .slist{flex:1;overflow-y:auto}
 
-/* Best practices panel */
-.bp{width:260px;background:#0a0a0a;border-left:1px solid #1e1e1e;overflow-y:auto;padding:12px;flex-shrink:0}
-.bp.hidden{display:none}
-.bp h3{font-size:11px;color:#888;margin-bottom:10px}
-.bpcard{padding:8px 10px;margin-bottom:6px;background:#111;border-radius:6px;border-left:3px solid #4285F4}
+/* Canvas */
+canvas{flex:1;cursor:default}
+
+/* Right panel — prompt + templates */
+.rpanel{width:320px;background:#0a0a0a;border-left:1px solid #1e1e1e;display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;transition:width 0.2s ease}
+.rpanel.hidden{width:0;border:none;overflow:hidden}
+.rpanel-inner{width:320px;padding:20px;display:flex;flex-direction:column;height:100%}
+.rpanel h2{font-size:16px;font-weight:700;color:#eee;margin-bottom:6px;letter-spacing:-0.3px}
+.rpanel .sub{font-size:12px;color:#555;margin-bottom:20px;line-height:1.5}
+.rpanel .logo-area{text-align:center;margin-bottom:16px}
+.rpanel .logo-area img{height:32px;opacity:0.8}
+
+/* Template chips */
+.tpl-section{margin-bottom:16px}
+.tpl-label{font-size:9px;color:#444;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px}
+.tpl-grid{display:flex;flex-wrap:wrap;gap:6px}
+.tpl-chip{padding:7px 12px;font-size:11px;background:#111;border:1px solid #1e1e1e;border-radius:6px;color:#777;cursor:pointer;font-family:inherit}
+.tpl-chip:hover{border-color:#444;color:#ccc;background:#161616}
+
+/* Prompt area */
+.prompt-area{margin-top:auto}
+.prompt-area textarea{width:100%;height:90px;padding:12px;background:#111;border:1px solid #1e1e1e;border-radius:10px;color:#ddd;font-size:13px;font-family:inherit;resize:none;outline:none;line-height:1.5}
+.prompt-area textarea:focus{border-color:#333}
+.prompt-area textarea::placeholder{color:#444}
+.prompt-area button{width:100%;margin-top:8px;padding:10px;background:#fff;color:#111;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+.prompt-area button:hover{opacity:0.85}
+
+/* Best practices inside right panel */
+.bp-section{margin-top:12px;flex:1;overflow-y:auto;min-height:0}
+.bp-section.hidden{display:none}
+.bpcard{padding:7px 9px;margin-bottom:5px;background:#111;border-radius:5px;border-left:3px solid #4285F4}
 .bpcard[data-c="SECURITY"]{border-left-color:#34A853}
 .bpcard[data-c="COST"]{border-left-color:#F9AB00}
 .bpcard[data-c="PERFORMANCE"]{border-left-color:#EA4335}
-.bpcard .cat{font-size:8px;color:#666;text-transform:uppercase;letter-spacing:1px}
-.bpcard .tip{font-size:11px;color:#aaa;line-height:1.4;margin-top:2px}
-
-/* Canvas */
-canvas{flex:1;cursor:default}
+.bpcard[data-c="NETWORK"]{border-left-color:#4285F4}
+.bpcard[data-c="COMPLIANCE"]{border-left-color:#7B1FA2}
+.bpcard .cat{font-size:7px;color:#555;text-transform:uppercase;letter-spacing:1px}
+.bpcard .tip{font-size:10px;color:#999;line-height:1.4;margin-top:1px}
 
 /* Status bar */
 .status{height:26px;background:#080808;border-top:1px solid #1e1e1e;display:flex;align-items:center;padding:0 14px;font-size:10px;color:#333;gap:12px}
 .dot{width:5px;height:5px;border-radius:50%;background:#3a3}
 
-/* Loading overlay */
-.loading{position:absolute;top:48px;left:0;right:0;bottom:26px;background:rgba(14,14,14,0.9);display:flex;align-items:center;justify-content:center;z-index:100;flex-direction:column;gap:12px}
+/* Loading */
+.loading{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(14,14,14,0.9);display:flex;align-items:center;justify-content:center;z-index:100;flex-direction:column;gap:12px}
 .loading.hidden{display:none}
 .spinner{width:32px;height:32px;border:3px solid #2a2a2a;border-top-color:#888;border-radius:50%;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -62,27 +89,27 @@ canvas{flex:1;cursor:default}
 
 <!-- Top bar -->
 <div class="top">
-  <a href="/app"><img src="/static/icon-white.png" alt="XlArch" style="height:28px"></a>
+  <a href="/app"><img src="/static/logo-white.png" alt="XlArch" style="height:20px"></a>
   <div class="sp"></div>
   <button class="tbtn" onclick="toggleSidebar()" id="sidebarBtn">Services</button>
-  <button class="tbtn" onclick="toggleBP()" id="bpBtn">Practices</button>
-  <span style="color:#333">|</span>
+  <span class="sep">|</span>
   <button class="tbtn" onclick="exportPPTX()">PPTX</button>
   <button class="tbtn" onclick="exportPNG()">PNG</button>
   <button class="tbtn" onclick="saveArch()">Save</button>
-  <span style="color:#333">|</span>
+  <span class="sep">|</span>
   <button class="tbtn" onclick="zoomIn()">+</button>
   <span id="zoomLbl" style="font-size:10px;color:#444;min-width:36px;text-align:center">100%</span>
   <button class="tbtn" onclick="zoomOut()">−</button>
   <button class="tbtn" onclick="resetView()">⟲</button>
   <div class="sp"></div>
+  <button class="tbtn" onclick="togglePanel()" id="panelBtn" style="background:#1a1a2e;border-color:#334;color:#88f">Prompt</button>
   <div class="avatar">{{ user.name[0] | upper }}</div>
   <span class="uname">{{ user.name }}</span>
 </div>
 
 <!-- Main -->
-<div class="main" style="position:relative">
-  <!-- Sidebar: Service palette -->
+<div class="main">
+  <!-- Left: Service palette -->
   <div class="sidebar hidden" id="sidebar">
     <div class="stitle">Drag to canvas</div>
     <div class="slist">
@@ -98,13 +125,39 @@ canvas{flex:1;cursor:default}
     </div>
   </div>
 
-  <!-- Canvas -->
+  <!-- Center: Canvas -->
   <canvas id="cv"></canvas>
 
-  <!-- Best Practices -->
-  <div class="bp hidden" id="bp">
-    <h3>Well-Architected Review</h3>
-    <div id="bpList"></div>
+  <!-- Right: Prompt panel -->
+  <div class="rpanel" id="rpanel">
+    <div class="rpanel-inner">
+      <div class="logo-area"><img src="/static/logo-white.png" alt="XlArch"></div>
+      <h2>What are you architecting?</h2>
+      <div class="sub">Describe your system or pick a reference architecture.</div>
+
+      <div class="tpl-section">
+        <div class="tpl-label">Reference Architectures</div>
+        <div class="tpl-grid">
+          <div class="tpl-chip" onclick="loadTemplate('onprem_gcp')">On-Prem → GCP</div>
+          <div class="tpl-chip" onclick="loadTemplate('identity')">Identity & Secrets</div>
+          <div class="tpl-chip" onclick="loadTemplate('data_analytics')">Data Analytics</div>
+          <div class="tpl-chip" onclick="loadTemplate('diagnostics_agentic')">Diagnostics Agent</div>
+          <div class="tpl-chip" onclick="loadTemplate('aws_gcp')">AWS → GCP</div>
+          <div class="tpl-chip" onclick="loadTemplate('azure_gcp')">Azure → GCP</div>
+          <div class="tpl-chip" onclick="loadTemplate('landing_zone')">Landing Zone</div>
+        </div>
+      </div>
+
+      <div class="bp-section hidden" id="bpSection">
+        <div class="tpl-label">Best Practices</div>
+        <div id="bpList"></div>
+      </div>
+
+      <div class="prompt-area">
+        <textarea id="prompt" placeholder="e.g. Real-time fraud detection pipeline with streaming, ML inference, and alerting..."></textarea>
+        <button onclick="generateFromPanel()">Generate →</button>
+      </div>
+    </div>
   </div>
 
   <!-- Loading -->
@@ -149,10 +202,10 @@ const NW = 130, NH = 90, IS = 40, ZG = 190, LG = 150, LP = 80, TP = 90, GOV_OFF 
 function resize() {
   const par = cv.parentElement;
   const sb = document.getElementById("sidebar");
-  const bp = document.getElementById("bp");
+  const rp = document.getElementById("rpanel");
   const sbW = sb.classList.contains("hidden") ? 0 : 220;
-  const bpW = bp.classList.contains("hidden") ? 0 : 260;
-  W = par.clientWidth - sbW - bpW;
+  const rpW = rp.classList.contains("hidden") ? 0 : 320;
+  W = par.clientWidth - sbW - rpW;
   H = par.clientHeight;
   cv.width = W * devicePixelRatio;
   cv.height = H * devicePixelRatio;
@@ -291,6 +344,81 @@ function draw() {
       ctx.fill();
     }
   });
+
+  ctx.restore();
+
+  // ── Rulers (drawn on top, in screen space)
+  const RH = 22; // ruler height/width
+  const rulerBg = "#f0f1f3";
+  const rulerLine = "#d0d3d8";
+  const rulerText = "#8a8e96";
+  const tickColor = "#c0c4cc";
+
+  // Calculate ruler intervals based on zoom
+  let step = 50;
+  if (zoom < 0.4) step = 200;
+  else if (zoom < 0.7) step = 100;
+  else if (zoom > 1.5) step = 25;
+
+  // ── Top ruler
+  ctx.save();
+  ctx.fillStyle = rulerBg;
+  ctx.fillRect(0, 0, W, RH);
+  ctx.strokeStyle = rulerLine;
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(0, RH); ctx.lineTo(W, RH); ctx.stroke();
+
+  ctx.font = "10px system-ui";
+  ctx.fillStyle = rulerText;
+  ctx.textAlign = "center";
+
+  const startX = Math.floor(-panX / step) * step;
+  for (let vx = startX; vx < (-panX + W / zoom); vx += step) {
+    const sx = (vx + panX) * zoom;
+    if (sx < RH || sx > W) continue;
+    // Tick
+    ctx.strokeStyle = tickColor;
+    ctx.beginPath(); ctx.moveTo(sx, RH - 6); ctx.lineTo(sx, RH); ctx.stroke();
+    // Label
+    ctx.fillStyle = rulerText;
+    ctx.fillText(vx, sx, RH - 8);
+    // Minor ticks
+    for (let m = 1; m < 5; m++) {
+      const mx = (vx + m * step / 5 + panX) * zoom;
+      if (mx > RH && mx < W) {
+        ctx.beginPath(); ctx.moveTo(mx, RH - 3); ctx.lineTo(mx, RH); ctx.stroke();
+      }
+    }
+  }
+
+  // ── Left ruler
+  ctx.fillStyle = rulerBg;
+  ctx.fillRect(0, 0, RH, H);
+  ctx.strokeStyle = rulerLine;
+  ctx.beginPath(); ctx.moveTo(RH, 0); ctx.lineTo(RH, H); ctx.stroke();
+
+  ctx.textAlign = "right";
+  const startY = Math.floor(-panY / step) * step;
+  for (let vy = startY; vy < (-panY + H / zoom); vy += step) {
+    const sy = (vy + panY) * zoom;
+    if (sy < RH || sy > H) continue;
+    ctx.strokeStyle = tickColor;
+    ctx.beginPath(); ctx.moveTo(RH - 6, sy); ctx.lineTo(RH, sy); ctx.stroke();
+    ctx.fillStyle = rulerText;
+    ctx.fillText(vy, RH - 8, sy + 3);
+    for (let m = 1; m < 5; m++) {
+      const my = (vy + m * step / 5 + panY) * zoom;
+      if (my > RH && my < H) {
+        ctx.beginPath(); ctx.moveTo(RH - 3, my); ctx.lineTo(RH, my); ctx.stroke();
+      }
+    }
+  }
+
+  // Corner square
+  ctx.fillStyle = rulerBg;
+  ctx.fillRect(0, 0, RH, RH);
+  ctx.strokeStyle = rulerLine;
+  ctx.strokeRect(0, 0, RH, RH);
 
   ctx.restore();
 }
@@ -498,10 +626,10 @@ document.addEventListener("keydown", e => {
     if (selectedEdge !== null && selectedEdge < arch.edges.length) {
       arch.edges.splice(selectedEdge, 1);
       selectedEdge = null;
-      // Re-render to get updated commands
       fetch("/api/rerender", {method: "POST", headers: {"Content-Type": "application/json"},
         body: JSON.stringify({architecture: arch})
       }).then(r => r.json()).then(data => {
+        if (data.architecture) { arch = data.architecture; pos = arch.positions || pos; }
         if (data.renderCommands) { renderCommands = data.renderCommands; }
         draw();
       }).catch(() => draw());
@@ -514,11 +642,11 @@ document.addEventListener("keydown", e => {
       delete pos[selectedNode];
       delete dragDeltas[selectedNode];
       selectedNode = null;
-      // Re-render
       fetch("/api/rerender", {method: "POST", headers: {"Content-Type": "application/json"},
         body: JSON.stringify({architecture: arch})
       }).then(r => r.json()).then(data => {
-        if (data.renderCommands) { renderCommands = data.renderCommands; pos = data.positions || pos; }
+        if (data.architecture) { arch = data.architecture; pos = arch.positions || pos; }
+        if (data.renderCommands) { renderCommands = data.renderCommands; }
         updateStatus();
         draw();
       }).catch(() => { updateStatus(); draw(); });
@@ -567,12 +695,23 @@ function toggleSidebar() {
   resize();
 }
 
-function toggleBP() {
-  const bp = document.getElementById("bp");
-  bp.classList.toggle("hidden");
-  document.getElementById("bpBtn").classList.toggle("act", !bp.classList.contains("hidden"));
+function togglePanel() {
+  const rp = document.getElementById("rpanel");
+  rp.classList.toggle("hidden");
+  document.getElementById("panelBtn").classList.toggle("act", !rp.classList.contains("hidden"));
   resize();
 }
+
+function generateFromPanel() {
+  const input = document.getElementById("prompt");
+  if (!input.value.trim()) return;
+  generate(input.value.trim());
+}
+
+// Ctrl+Enter to send
+document.getElementById("prompt").addEventListener("keydown", e => {
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) generateFromPanel();
+});
 
 function zoomIn() { zoom = Math.min(2.5, zoom + 0.15); document.getElementById("zoomLbl").textContent = Math.round(zoom*100)+"%"; draw(); }
 function zoomOut() { zoom = Math.max(0.3, zoom - 0.15); document.getElementById("zoomLbl").textContent = Math.round(zoom*100)+"%"; draw(); }
@@ -613,14 +752,21 @@ async function generate(prompt) {
 
 function updateBP() {
   const list = document.getElementById("bpList");
+  const section = document.getElementById("bpSection");
   list.innerHTML = "";
-  (arch.bestPractices || []).forEach(bp => {
-    const div = document.createElement("div");
-    div.className = "bpcard";
-    div.dataset.c = bp.category || "";
-    div.innerHTML = `<div class="cat">${bp.category||""}</div><div class="tip">${bp.tip||""}</div>`;
-    list.appendChild(div);
-  });
+  const bps = (arch && arch.bestPractices) ? arch.bestPractices : [];
+  if (bps.length > 0) {
+    section.classList.remove("hidden");
+    bps.forEach(bp => {
+      const div = document.createElement("div");
+      div.className = "bpcard";
+      div.dataset.c = bp.category || "";
+      div.innerHTML = `<div class="cat">${bp.category||""}</div><div class="tip">${bp.tip||""}</div>`;
+      list.appendChild(div);
+    });
+  } else {
+    section.classList.add("hidden");
+  }
 }
 
 // Apply drag deltas to architecture for export

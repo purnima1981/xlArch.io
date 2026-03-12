@@ -119,8 +119,8 @@ templates = Jinja2Templates(directory="templates")
 async def home(request: Request):
     user = get_current_user(request)
     if user:
-        return RedirectResponse("/app", status_code=303)
-    return templates.TemplateResponse("landing.html", {"request": request})
+        return RedirectResponse("/canvas", status_code=303)
+    return RedirectResponse("/login", status_code=303)
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
@@ -140,12 +140,12 @@ async def signup_page(request: Request):
 async def reset_page(request: Request):
     return templates.TemplateResponse("auth.html", {"request": request, "mode": "reset", "error": None, "success": None})
 
-@app.get("/app", response_class=HTMLResponse)
+@app.get("/app")
 async def app_page(request: Request):
     user = get_current_user(request)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    return templates.TemplateResponse("dashboard.html", {"request": request, "user": user})
+    return RedirectResponse("/canvas", status_code=303)
 
 # ── Routes: Auth Actions ──────────────────────────────
 
@@ -239,8 +239,9 @@ async def get_template(template_id: str):
         return JSONResponse({"error": "Template not found"}, status_code=404)
     arch = dict(t["data"])
     render_result = render(arch)
-    arch["positions"] = render_result["positions"]
-    return {"architecture": arch, "renderCommands": render_result["commands"]}
+    merged = render_result["architecture"]
+    merged["positions"] = render_result["positions"]
+    return {"architecture": merged, "renderCommands": render_result["commands"]}
 
 # ── Canvas Page ───────────────────────────────────────
 
@@ -306,9 +307,10 @@ async def generate(request: Request):
 
     # Render — ONE function, used by canvas AND pptx
     render_result = render(architecture)
-    architecture["positions"] = render_result["positions"]
+    merged = render_result["architecture"]
+    merged["positions"] = render_result["positions"]
 
-    return {"architecture": architecture, "renderCommands": render_result["commands"]}
+    return {"architecture": merged, "renderCommands": render_result["commands"]}
 
 # ── Update Positions (from canvas drag) ───────────────
 
@@ -329,7 +331,9 @@ async def rerender(request: Request):
     if not arch:
         return JSONResponse({"error": "No architecture"}, status_code=400)
     render_result = render(arch)
-    return {"renderCommands": render_result["commands"], "positions": render_result["positions"]}
+    merged = render_result["architecture"]
+    merged["positions"] = render_result["positions"]
+    return {"architecture": merged, "renderCommands": render_result["commands"], "positions": render_result["positions"]}
 
 # ── Export PPTX ───────────────────────────────────────
 
@@ -436,8 +440,9 @@ async def get_arch(arch_id: str, request: Request):
 
     arch = row["data"] if isinstance(row["data"], dict) else json.loads(row["data"])
     render_result = render(arch)
-    arch["positions"] = render_result["positions"]
-    return {"architecture": arch, "renderCommands": render_result["commands"]}
+    merged = render_result["architecture"]
+    merged["positions"] = render_result["positions"]
+    return {"architecture": merged, "renderCommands": render_result["commands"]}
 
 # ── Run ───────────────────────────────────────────────
 

@@ -133,7 +133,7 @@ def render(architecture):
                             "text": str(n["step"]), "size": 8, "color": "#FFFFFF",
                             "bold": True, "align": "center", "nodeId": nid})
 
-    return {"commands": commands, "width": cw, "height": ch, "positions": positions}
+    return {"commands": commands, "width": cw, "height": ch, "positions": positions, "architecture": arch}
 
 
 # ═══════════════════════════════════════════
