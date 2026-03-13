@@ -335,13 +335,20 @@ function draw() {
       }
       ctx.stroke();
 
-      // Arrowhead at last point
+      // Arrowhead — points in direction of last segment
       const last = adjusted[adjusted.length - 1];
+      const prev = adjusted[adjusted.length - 2];
+      const adx = last[0] - prev[0], ady = last[1] - prev[1];
+      const alen = Math.sqrt(adx*adx + ady*ady) || 1;
+      const ux = adx/alen, uy = ady/alen; // unit vector in arrow direction
+      const px2 = -uy, py2 = ux; // perpendicular
+      const asize = 9;
+
       ctx.fillStyle = isSelEdge ? "#EA4335" : (cmd.color || "#9E9E9E");
       ctx.beginPath();
       ctx.moveTo(last[0], last[1]);
-      ctx.lineTo(last[0] - 9, last[1] - 5);
-      ctx.lineTo(last[0] - 9, last[1] + 5);
+      ctx.lineTo(last[0] - ux*asize + px2*5, last[1] - uy*asize + py2*5);
+      ctx.lineTo(last[0] - ux*asize - px2*5, last[1] - uy*asize - py2*5);
       ctx.closePath();
       ctx.fill();
     }
@@ -688,16 +695,35 @@ document.querySelectorAll(".sitem").forEach(el => {
 cv.addEventListener("dragover", e => e.preventDefault());
 cv.addEventListener("drop", e => {
   e.preventDefault();
-  if (!arch) return;
+  if (!arch) {
+    // No architecture yet — create a blank one
+    arch = {title: "Custom Architecture", zones: ["custom"], lanes: ["custom"], nodes: [], edges: []};
+  }
   try {
     const svc = JSON.parse(e.dataTransfer.getData("text/plain"));
     const [x, y] = toCanvas(e.clientX, e.clientY);
     const newId = svc.id + "_" + Date.now();
     arch.nodes.push({id: newId, icon: svc.icon, label: svc.label, zone: "custom", lane: "custom"});
     pos[newId] = {x, y};
-    updateStatus();
-    draw();
-  } catch(err) {}
+
+    // Re-render to get draw commands for the new node
+    fetch("/api/rerender", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({architecture: arch})
+    }).then(r => r.json()).then(data => {
+      if (data.architecture) { arch = data.architecture; }
+      if (data.renderCommands) { renderCommands = data.renderCommands; }
+      // Preserve the drop position (rerender recalculates positions)
+      pos[newId] = {x, y};
+      if (data.positions) {
+        // Keep all existing positions, only add new ones
+        Object.keys(data.positions).forEach(k => {
+          if (!pos[k]) pos[k] = data.positions[k];
+        });
+      }
+      updateStatus();
+      draw();
+    }).catch(() => { updateStatus(); draw(); });
+  } catch(err) { console.error(err); }
 });
 
 // ═══════════════════════════════════════

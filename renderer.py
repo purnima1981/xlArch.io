@@ -72,8 +72,7 @@ def render(architecture):
         commands.append({"type": "text", "x": LP + i * zone_gap, "y": 50, "w": NW + 20,
                         "text": label, "size": 7, "color": "#9E9E9E", "bold": True, "align": "center"})
 
-    # ── Edges (smart orthogonal routing)
-    # Track used midpoints to offset parallel arrows
+    # ── Edges (smart orthogonal routing — works in ALL directions)
     used_mid = {}
 
     for e in edges:
@@ -83,51 +82,56 @@ def render(architecture):
 
         fx, fy = fp["x"], fp["y"]
         tx, ty = tp["x"], tp["y"]
-        fcx, fcy = fx + NW / 2, fy + NH / 2  # from center
-        tcx, tcy = tx + NW / 2, ty + NH / 2  # to center
+        fcx, fcy = fx + NW / 2, fy + NH / 2
+        tcx, tcy = tx + NW / 2, ty + NH / 2
 
         dx = tcx - fcx
         dy = tcy - fcy
+        GAP = 8
 
-        GAP = 8  # gap from node edge
-
-        if abs(dy) < 10:
-            # Same lane — horizontal
+        # Determine best exit and entry sides based on relative position
+        if abs(dx) > abs(dy):
+            # Primarily horizontal
             if dx > 0:
-                # Left to right
-                points = [(fx + NW + GAP, fcy), (tx - GAP, tcy)]
+                # Target is to the RIGHT
+                sx1, sy1 = fx + NW + GAP, fcy   # exit right
+                sx2, sy2 = tx - GAP, tcy         # enter left
             else:
-                # Right to left — route around bottom
-                bot = max(fy, ty) + NH + 25
-                points = [(fx + NW + GAP, fcy), (fx + NW + GAP, bot),
-                           (tx - GAP, bot), (tx - GAP, tcy)]
-
-        elif abs(dx) < 10:
-            # Same zone — vertical
+                # Target is to the LEFT
+                sx1, sy1 = fx - GAP, fcy          # exit left
+                sx2, sy2 = tx + NW + GAP, tcy     # enter right
+        else:
+            # Primarily vertical
             if dy > 0:
-                points = [(fcx, fy + NH + GAP), (tcx, ty - GAP)]
+                # Target is BELOW
+                sx1, sy1 = fcx, fy + NH + GAP    # exit bottom
+                sx2, sy2 = tcx, ty - GAP          # enter top
             else:
-                points = [(fcx, fy - GAP), (tcx, ty + NH + GAP)]
+                # Target is ABOVE
+                sx1, sy1 = fcx, fy - GAP          # exit top
+                sx2, sy2 = tcx, ty + NH + GAP     # enter bottom
 
-        elif dx > 0:
-            # Forward + cross-lane — L-shape exit right, enter left
-            mid_key = round((fx + NW + tx) / 2 / 20) * 20
+        # Route orthogonally
+        if abs(sy1 - sy2) < 5:
+            # Straight horizontal
+            points = [(sx1, sy1), (sx2, sy2)]
+        elif abs(sx1 - sx2) < 5:
+            # Straight vertical
+            points = [(sx1, sy1), (sx2, sy2)]
+        elif abs(dx) > abs(dy):
+            # Primarily horizontal — L-shape with vertical jog in middle
+            mid_key = round((sx1 + sx2) / 2 / 20) * 20
             offset = used_mid.get(mid_key, 0) * 12
             used_mid[mid_key] = used_mid.get(mid_key, 0) + 1
-            midX = (fx + NW + tx) / 2 + offset
-
-            points = [(fx + NW + GAP, fcy), (midX, fcy), (midX, tcy), (tx - GAP, tcy)]
-
+            midX = (sx1 + sx2) / 2 + offset
+            points = [(sx1, sy1), (midX, sy1), (midX, sy2), (sx2, sy2)]
         else:
-            # Backward + cross-lane — route around
-            if dy > 0:
-                midY = fy + NH + 25
-                points = [(fx + NW + GAP, fcy), (fx + NW + GAP, midY),
-                           (tx - GAP, midY), (tx - GAP, tcy)]
-            else:
-                midY = ty + NH + 25
-                points = [(fcx, fy - GAP), (fcx, midY),
-                           (tx - GAP, midY), (tx - GAP, tcy)]
+            # Primarily vertical — L-shape with horizontal jog in middle
+            mid_key = round((sy1 + sy2) / 2 / 20) * 20
+            offset = used_mid.get(mid_key, 0) * 12
+            used_mid[mid_key] = used_mid.get(mid_key, 0) + 1
+            midY = (sy1 + sy2) / 2 + offset
+            points = [(sx1, sy1), (sx1, midY), (sx2, midY), (sx2, sy2)]
 
         commands.append({"type": "arrow", "points": points,
                         "color": ARROW_COLOR, "width": 2,
@@ -151,11 +155,11 @@ def render(architecture):
         commands.append({"type": "image", "x": x + (NW - icon_size) / 2, "y": y + 6,
                         "w": icon_size, "h": icon_size, "src": n.get("icon", ""), "nodeId": nid})
 
-        # Label
+        # Label (closer to icon)
         label = n.get("label", "")
         if len(label) > 18:
             label = label[:16] + "…"
-        commands.append({"type": "text", "x": x, "y": y + NH - 16, "w": NW,
+        commands.append({"type": "text", "x": x, "y": y + NH - 24, "w": NW,
                         "text": label, "size": 9, "color": "#3C4043",
                         "bold": False, "align": "center", "nodeId": nid})
 
