@@ -696,33 +696,30 @@ cv.addEventListener("dragover", e => e.preventDefault());
 cv.addEventListener("drop", e => {
   e.preventDefault();
   if (!arch) {
-    // No architecture yet — create a blank one
-    arch = {title: "Custom Architecture", zones: ["custom"], lanes: ["custom"], nodes: [], edges: []};
+    arch = {title: "Custom Architecture", zones: [], lanes: [], nodes: [], edges: [], positions: {}};
+    renderCommands = [];
   }
   try {
     const svc = JSON.parse(e.dataTransfer.getData("text/plain"));
     const [x, y] = toCanvas(e.clientX, e.clientY);
     const newId = svc.id + "_" + Date.now();
+
+    // Add to architecture
     arch.nodes.push({id: newId, icon: svc.icon, label: svc.label, zone: "custom", lane: "custom"});
     pos[newId] = {x, y};
 
-    // Re-render to get draw commands for the new node
-    fetch("/api/rerender", {method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({architecture: arch})
-    }).then(r => r.json()).then(data => {
-      if (data.architecture) { arch = data.architecture; }
-      if (data.renderCommands) { renderCommands = data.renderCommands; }
-      // Preserve the drop position (rerender recalculates positions)
-      pos[newId] = {x, y};
-      if (data.positions) {
-        // Keep all existing positions, only add new ones
-        Object.keys(data.positions).forEach(k => {
-          if (!pos[k]) pos[k] = data.positions[k];
-        });
-      }
-      updateStatus();
-      draw();
-    }).catch(() => { updateStatus(); draw(); });
+    // Generate render commands locally — same format as server
+    renderCommands.push(
+      {type: "rect", x: x, y: y, w: NW, h: NH, fill: "#FFFFFF", stroke: "#E0E4E8",
+       stroke_width: 1, radius: 10, shadow: true, nodeId: newId},
+      {type: "image", x: x + (NW - 54) / 2, y: y + 6, w: 54, h: 54,
+       src: svc.icon, nodeId: newId},
+      {type: "text", x: x, y: y + NH - 24, w: NW, text: svc.label,
+       size: 9, color: "#3C4043", bold: false, align: "center", nodeId: newId}
+    );
+
+    updateStatus();
+    draw();
   } catch(err) { console.error(err); }
 });
 
