@@ -206,6 +206,12 @@ def commands_to_pptx(render_result, output_path):
     prs.slide_height = Inches(SLIDE_H)
     slide = prs.slides.add_slide(prs.slide_layouts[6])
 
+    # Match canvas background
+    bg = slide.background
+    fill = bg.fill
+    fill.solid()
+    fill.fore_color.rgb = RGBColor(0xF8, 0xF9, 0xFB)  # #f8f9fb — same as canvas
+
     # Collect shapes per nodeId for grouping
     node_shapes = {}  # nodeId → [shape, ...]
 
@@ -219,8 +225,22 @@ def commands_to_pptx(render_result, output_path):
                 MSO_SHAPE.ROUNDED_RECTANGLE if cmd.get("radius", 0) > 0 else MSO_SHAPE.RECTANGLE,
                 Inches(sx(cmd["x"])), Inches(sy(cmd["y"])),
                 Inches(sw(cmd["w"])), Inches(sw(cmd["h"])))
-            shape.fill.solid()
-            shape.fill.fore_color.rgb = rgb(cmd["fill"])
+            fill_color = cmd["fill"]
+
+            # Handle opacity — blend with white background
+            opacity = cmd.get("opacity", 1.0)
+            if opacity < 1.0:
+                r_bg, g_bg, b_bg = 255, 255, 255  # white slide bg
+                h = fill_color.lstrip("#")
+                r = int(int(h[:2], 16) * opacity + r_bg * (1 - opacity))
+                g = int(int(h[2:4], 16) * opacity + g_bg * (1 - opacity))
+                b = int(int(h[4:6], 16) * opacity + b_bg * (1 - opacity))
+                shape.fill.solid()
+                shape.fill.fore_color.rgb = RGBColor(min(r, 255), min(g, 255), min(b, 255))
+            else:
+                shape.fill.solid()
+                shape.fill.fore_color.rgb = rgb(fill_color)
+
             if cmd.get("stroke"):
                 shape.line.color.rgb = rgb(cmd["stroke"])
                 shape.line.width = Pt(cmd.get("stroke_width", 0.5))
@@ -240,14 +260,17 @@ def commands_to_pptx(render_result, output_path):
                     pass
 
         elif t == "text":
+            text_h = max(0.18, sw(cmd.get("size", 9)) * 2.5)
             shape = slide.shapes.add_textbox(
                 Inches(sx(cmd["x"])), Inches(sy(cmd["y"])),
-                Inches(sw(cmd["w"])), Inches(0.25))
+                Inches(sw(cmd["w"])), Inches(text_h))
             tf = shape.text_frame
             tf.word_wrap = True
+            tf.margin_top = 0
+            tf.margin_bottom = 0
             p = tf.paragraphs[0]
             p.text = cmd["text"]
-            p.font.size = Pt(cmd.get("size", 7))
+            p.font.size = Pt(max(4, cmd.get("size", 7) * scale * 1.2))
             p.font.color.rgb = rgb(cmd.get("color", "#3C4043"))
             p.font.bold = cmd.get("bold", False)
             align_map = {"center": PP_ALIGN.CENTER, "left": PP_ALIGN.LEFT, "right": PP_ALIGN.RIGHT}
@@ -257,6 +280,7 @@ def commands_to_pptx(render_result, output_path):
             pts = cmd["points"]
             color = rgb(cmd.get("color", "#9E9E9E"))
             width = Pt(cmd.get("width", 2))
+
             for j in range(len(pts) - 1):
                 x1, y1 = pts[j]
                 x2, y2 = pts[j + 1]
@@ -265,6 +289,18 @@ def commands_to_pptx(render_result, output_path):
                     Inches(sx(x2)), Inches(sy(y2)))
                 conn.line.color.rgb = color
                 conn.line.width = width
+
+                # Arrowhead on LAST segment only
+                if j == len(pts) - 2:
+                    from pptx.oxml.ns import qn
+                    ln = conn.line._ln
+                    tail = ln.find(qn('a:tailEnd'))
+                    if tail is None:
+                        from lxml import etree
+                        tail = etree.SubElement(ln, qn('a:tailEnd'))
+                    tail.set('type', 'triangle')
+                    tail.set('w', 'med')
+                    tail.set('len', 'med')
 
         return shape
 
