@@ -1,653 +1,449 @@
 """
 XlArch Reference Templates — Enterprise-grade architecture patterns.
-Real flows, real enterprise tools, proper propagation paths.
+
+RULES:
+  - ONE node per zone+lane cell. No crowding.
+  - Each lane tells ONE story, reads left to right.
+  - Cross-lane edges show dependencies.
+  - Governance = reusable security pattern (same everywhere).
 """
 
 # ═══════════════════════════════════════════════════════════
-#  1. IDENTITY & SECRETS FLOW
-#  AD → Cloud Identity → IAM → Workload Identity
-#  CyberArk → Secret Manager → Workloads
+#  1. IDENTITY & SECRETS
 # ═══════════════════════════════════════════════════════════
 
 IDENTITY_SECRETS = {
     "title": "Identity & Secrets Management",
-    "layout": "pipeline",
-    "zones": ["corporate", "identity_sync", "cloud_iam", "secrets_mgmt", "workload_auth", "runtime"],
-    "lanes": ["user_identity", "service_identity", "secrets"],
+    "zones": ["corporate", "boundary", "cloud_iam", "workload"],
+    "lanes": ["user_identity", "service_identity", "secrets", "enforcement"],
     "nodes": [
-        # Corporate (source of truth)
-        {"id": "active_dir",      "icon": "users",          "label": "Active Directory",     "zone": "corporate",      "lane": "user_identity",    "step": 1},
-        {"id": "ad_groups",       "icon": "users",          "label": "AD Security Groups",   "zone": "corporate",      "lane": "service_identity"},
-        {"id": "cyberark",        "icon": "kms",            "label": "CyberArk Vault",       "zone": "corporate",      "lane": "secrets",          "step": 1},
+        {"id": "ad",             "icon": "users",          "label": "Active Directory",   "zone": "corporate",  "lane": "user_identity",    "step": 1},
+        {"id": "gcds",           "icon": "iam",            "label": "GCDS Sync",          "zone": "boundary",   "lane": "user_identity",    "step": 2},
+        {"id": "cloud_id",       "icon": "iam",            "label": "Cloud Identity",     "zone": "cloud_iam",  "lane": "user_identity",    "step": 3},
+        {"id": "iam_roles",      "icon": "iam",            "label": "IAM Roles",          "zone": "workload",   "lane": "user_identity",    "step": 4},
 
-        # Identity Sync
-        {"id": "gcds",            "icon": "iam",            "label": "GCDS (Dir Sync)",      "zone": "identity_sync",  "lane": "user_identity",    "step": 2},
-        {"id": "cloud_identity",  "icon": "iam",            "label": "Cloud Identity",       "zone": "identity_sync",  "lane": "user_identity",    "step": 3},
-        {"id": "saml_sso",        "icon": "iam",            "label": "SAML / SSO",           "zone": "identity_sync",  "lane": "service_identity", "step": 2},
+        {"id": "onprem_app",     "icon": "compute_engine", "label": "On-Prem App",        "zone": "corporate",  "lane": "service_identity", "step": 1},
+        {"id": "wif",            "icon": "iam",            "label": "WI Federation",      "zone": "boundary",   "lane": "service_identity", "step": 2},
+        {"id": "gcp_sa",         "icon": "iam",            "label": "GCP Service Acct",   "zone": "cloud_iam",  "lane": "service_identity", "step": 3},
+        {"id": "token",          "icon": "kms",            "label": "Short-Lived Token",  "zone": "workload",   "lane": "service_identity", "step": 4},
 
-        # Cloud IAM
-        {"id": "org_policies",    "icon": "iam",            "label": "Org Policies",         "zone": "cloud_iam",      "lane": "user_identity",    "step": 4},
-        {"id": "iam_roles",       "icon": "iam",            "label": "IAM Custom Roles",     "zone": "cloud_iam",      "lane": "user_identity"},
-        {"id": "iam_conditions",  "icon": "iam",            "label": "IAM Conditions",       "zone": "cloud_iam",      "lane": "service_identity"},
-        {"id": "svc_accounts",    "icon": "iam",            "label": "Service Accounts",     "zone": "cloud_iam",      "lane": "service_identity", "step": 4},
+        {"id": "cyberark",       "icon": "kms",            "label": "CyberArk Vault",     "zone": "corporate",  "lane": "secrets",          "step": 1},
+        {"id": "ccp_api",        "icon": "vpn",            "label": "CCP API Sync",       "zone": "boundary",   "lane": "secrets",          "step": 2},
+        {"id": "secret_mgr",     "icon": "kms",            "label": "Secret Manager",     "zone": "cloud_iam",  "lane": "secrets",          "step": 3},
+        {"id": "secret_inject",  "icon": "gke",            "label": "Workload Inject",    "zone": "workload",   "lane": "secrets",          "step": 4},
 
-        # Secrets Management
-        {"id": "secret_mgr",     "icon": "kms",            "label": "Secret Manager",       "zone": "secrets_mgmt",   "lane": "secrets",          "step": 3},
-        {"id": "kms_keys",       "icon": "kms",            "label": "Cloud KMS",            "zone": "secrets_mgmt",   "lane": "secrets",          "step": 4},
-        {"id": "cert_authority",  "icon": "kms",            "label": "CA Service (mTLS)",    "zone": "secrets_mgmt",   "lane": "service_identity"},
-
-        # Workload Auth
-        {"id": "wl_identity",     "icon": "iam",            "label": "Workload Identity",    "zone": "workload_auth",  "lane": "service_identity", "step": 5},
-        {"id": "wl_federation",   "icon": "iam",            "label": "WI Federation",        "zone": "workload_auth",  "lane": "user_identity",    "step": 5},
-        {"id": "secret_inject",   "icon": "kms",            "label": "Secret Injection",     "zone": "workload_auth",  "lane": "secrets",          "step": 5},
-
-        # Runtime
-        {"id": "gke_pods",        "icon": "gke",            "label": "GKE Pods",             "zone": "runtime",        "lane": "service_identity", "step": 6},
-        {"id": "cloud_run_svc",   "icon": "cloud_run",      "label": "Cloud Run",            "zone": "runtime",        "lane": "user_identity",    "step": 6},
-        {"id": "data_services",   "icon": "bigquery",       "label": "Data Services",        "zone": "runtime",        "lane": "secrets",          "step": 6},
+        {"id": "ad_groups",      "icon": "users",          "label": "AD Groups",          "zone": "corporate",  "lane": "enforcement"},
+        {"id": "domain_restrict","icon": "firewall",       "label": "Domain Restrict",    "zone": "boundary",   "lane": "enforcement"},
+        {"id": "sa_key_disable", "icon": "firewall",       "label": "SA Key Disabled",    "zone": "cloud_iam",  "lane": "enforcement"},
+        {"id": "cond_iam",       "icon": "firewall",       "label": "Conditional IAM",    "zone": "workload",   "lane": "enforcement"},
     ],
     "edges": [
-        # User identity flow
-        {"from": "active_dir",     "to": "gcds"},
-        {"from": "gcds",           "to": "cloud_identity"},
-        {"from": "cloud_identity", "to": "org_policies"},
-        {"from": "org_policies",   "to": "iam_roles"},
-        {"from": "iam_roles",      "to": "wl_federation"},
-        {"from": "wl_federation",  "to": "cloud_run_svc"},
-
-        # Service identity flow
-        {"from": "ad_groups",      "to": "saml_sso"},
-        {"from": "saml_sso",       "to": "iam_conditions"},
-        {"from": "iam_conditions", "to": "svc_accounts"},
-        {"from": "svc_accounts",   "to": "wl_identity"},
-        {"from": "cert_authority", "to": "wl_identity"},
-        {"from": "wl_identity",    "to": "gke_pods"},
-
-        # Secrets flow
-        {"from": "cyberark",       "to": "secret_mgr"},
-        {"from": "secret_mgr",     "to": "kms_keys"},
-        {"from": "kms_keys",       "to": "secret_inject"},
-        {"from": "secret_inject",  "to": "gke_pods"},
-        {"from": "secret_inject",  "to": "data_services"},
+        {"from": "ad",              "to": "gcds"},
+        {"from": "gcds",            "to": "cloud_id"},
+        {"from": "cloud_id",        "to": "iam_roles"},
+        {"from": "onprem_app",      "to": "wif"},
+        {"from": "wif",             "to": "gcp_sa"},
+        {"from": "gcp_sa",          "to": "token"},
+        {"from": "cyberark",        "to": "ccp_api"},
+        {"from": "ccp_api",         "to": "secret_mgr"},
+        {"from": "secret_mgr",      "to": "secret_inject"},
+        {"from": "ad_groups",       "to": "domain_restrict"},
+        {"from": "domain_restrict", "to": "sa_key_disable"},
+        {"from": "sa_key_disable",  "to": "cond_iam"},
+        {"from": "cloud_id",        "to": "gcp_sa"},
+        {"from": "iam_roles",       "to": "token"},
+        {"from": "token",           "to": "secret_inject"},
+        {"from": "sa_key_disable",  "to": "gcp_sa"},
     ],
     "governance": [
-        {"icon": "iam",          "label": "IAM"},
-        {"icon": "kms",          "label": "KMS / CMEK"},
-        {"icon": "monitoring",   "label": "Monitoring"},
-        {"icon": "logging",      "label": "Audit Logs"},
-        {"icon": "firewall",     "label": "VPC-SC"},
-        {"icon": "dataplex",     "label": "Dataplex"},
+        {"icon": "iam", "label": "IAM"}, {"icon": "kms", "label": "KMS / CMEK"},
+        {"icon": "monitoring", "label": "Monitoring"}, {"icon": "logging", "label": "Audit Logs"},
+        {"icon": "firewall", "label": "VPC-SC"}, {"icon": "dataplex", "label": "Dataplex"},
     ],
     "bestPractices": [
-        {"category": "SECURITY",    "tip": "GCDS sync — one-way from AD to Cloud Identity, never reverse"},
-        {"category": "SECURITY",    "tip": "No service account keys — use Workload Identity Federation only"},
-        {"category": "SECURITY",    "tip": "CyberArk secrets synced to Secret Manager via CCP/REST API"},
-        {"category": "SECURITY",    "tip": "IAM Conditions: restrict by IP, device, time for sensitive roles"},
-        {"category": "SECURITY",    "tip": "Certificate Authority Service for mTLS between all services"},
-        {"category": "NETWORK",     "tip": "SAML/SSO via Cloud Identity — enforce MFA for all users"},
-        {"category": "COMPLIANCE",  "tip": "Org policies: disable SA key creation, enforce uniform bucket access"},
-        {"category": "COMPLIANCE",  "tip": "Admin audit logs exported to SIEM for all IAM changes"},
-        {"category": "RELIABILITY", "tip": "Secret rotation automated — 90-day max for all credentials"},
-        {"category": "COST",        "tip": "Custom roles over predefined — least privilege reduces blast radius"},
+        {"category": "IDENTITY",   "tip": "GCDS syncs AD → Cloud Identity. One-way, never reverse."},
+        {"category": "IDENTITY",   "tip": "WIF replaces SA keys. Zero exported credentials."},
+        {"category": "SECURITY",   "tip": "Org policy: iam.disableServiceAccountKeyCreation everywhere."},
+        {"category": "COMPLIANCE", "tip": "Conditional IAM: restrict by device posture, IP, time."},
     ],
 }
-
-
-# ═══════════════════════════════════════════════════════════
-#  2. ON-PREM TO GCP — How On-Prem Tools Connect to GCP
-# ═══════════════════════════════════════════════════════════
 
 ONPREM_TO_GCP = {
     "title": "On-Prem to GCP Connectivity",
-    "layout": "pipeline",
     "zones": ["on_prem", "how", "gcp"],
     "lanes": ["identity", "secrets", "database", "compute", "messaging", "monitoring"],
     "nodes": [
-        # Identity
-        {"id": "ad",              "icon": "users",          "label": "Active Directory",     "zone": "on_prem", "lane": "identity",   "step": 1},
-        {"id": "gcds",            "icon": "iam",            "label": "GCDS Sync",            "zone": "how",     "lane": "identity",   "step": 2},
-        {"id": "cloud_iam",       "icon": "iam",            "label": "Cloud IAM",            "zone": "gcp",     "lane": "identity",   "step": 3},
-
-        # Secrets
-        {"id": "cyberark",        "icon": "kms",            "label": "CyberArk Vault",       "zone": "on_prem", "lane": "secrets",    "step": 1},
-        {"id": "vault_api",       "icon": "vpn",            "label": "CCP API / Sync",       "zone": "how",     "lane": "secrets",    "step": 2},
-        {"id": "secret_mgr",      "icon": "kms",            "label": "Secret Manager",       "zone": "gcp",     "lane": "secrets",    "step": 3},
-
-        # Database
-        {"id": "oracle",          "icon": "oracle",         "label": "Oracle DB",            "zone": "on_prem", "lane": "database",   "step": 1},
-        {"id": "interconnect",    "icon": "vpn",            "label": "Interconnect / DMS",   "zone": "how",     "lane": "database",   "step": 2},
-        {"id": "bigquery",        "icon": "bigquery",       "label": "BigQuery",             "zone": "gcp",     "lane": "database",   "step": 3},
-
-        # Compute
-        {"id": "vmware",          "icon": "compute_engine", "label": "VMware / VMs",         "zone": "on_prem", "lane": "compute",    "step": 1},
-        {"id": "ha_vpn",          "icon": "vpn",            "label": "HA Cloud VPN",         "zone": "how",     "lane": "compute",    "step": 2},
-        {"id": "gke",             "icon": "gke",            "label": "GKE",                  "zone": "gcp",     "lane": "compute",    "step": 3},
-
-        # Messaging
-        {"id": "kafka",           "icon": "kafka",          "label": "Kafka",                "zone": "on_prem", "lane": "messaging",  "step": 1},
-        {"id": "kafka_connect",   "icon": "vpn",            "label": "Kafka Connect",        "zone": "how",     "lane": "messaging",  "step": 2},
-        {"id": "pubsub",          "icon": "pubsub",         "label": "Pub/Sub",              "zone": "gcp",     "lane": "messaging",  "step": 3},
-
-        # Monitoring
-        {"id": "splunk",          "icon": "monitoring",     "label": "Splunk",               "zone": "on_prem", "lane": "monitoring", "step": 1},
-        {"id": "log_api",         "icon": "vpn",            "label": "Log Export API",       "zone": "how",     "lane": "monitoring", "step": 2},
-        {"id": "cloud_mon",       "icon": "monitoring",     "label": "Cloud Monitoring",     "zone": "gcp",     "lane": "monitoring", "step": 3},
+        {"id": "ad",           "icon": "users",          "label": "Active Directory",  "zone": "on_prem", "lane": "identity",   "step": 1},
+        {"id": "gcds",         "icon": "iam",            "label": "GCDS Sync",         "zone": "how",     "lane": "identity",   "step": 2},
+        {"id": "cloud_iam",    "icon": "iam",            "label": "Cloud IAM",         "zone": "gcp",     "lane": "identity",   "step": 3},
+        {"id": "cyberark",     "icon": "kms",            "label": "CyberArk Vault",    "zone": "on_prem", "lane": "secrets",    "step": 1},
+        {"id": "vault_api",    "icon": "vpn",            "label": "CCP API Sync",      "zone": "how",     "lane": "secrets",    "step": 2},
+        {"id": "secret_mgr",   "icon": "kms",            "label": "Secret Manager",    "zone": "gcp",     "lane": "secrets",    "step": 3},
+        {"id": "oracle",       "icon": "oracle",         "label": "Oracle DB",         "zone": "on_prem", "lane": "database",   "step": 1},
+        {"id": "interconnect", "icon": "vpn",            "label": "Interconnect",      "zone": "how",     "lane": "database",   "step": 2},
+        {"id": "bigquery",     "icon": "bigquery",       "label": "BigQuery",          "zone": "gcp",     "lane": "database",   "step": 3},
+        {"id": "vmware",       "icon": "compute_engine", "label": "VMware / VMs",      "zone": "on_prem", "lane": "compute",    "step": 1},
+        {"id": "ha_vpn",       "icon": "vpn",            "label": "HA Cloud VPN",      "zone": "how",     "lane": "compute",    "step": 2},
+        {"id": "gke",          "icon": "gke",            "label": "GKE",               "zone": "gcp",     "lane": "compute",    "step": 3},
+        {"id": "kafka",        "icon": "kafka",          "label": "Kafka",             "zone": "on_prem", "lane": "messaging",  "step": 1},
+        {"id": "kafka_connect","icon": "vpn",            "label": "Kafka Connect",     "zone": "how",     "lane": "messaging",  "step": 2},
+        {"id": "pubsub",       "icon": "pubsub",         "label": "Pub/Sub",           "zone": "gcp",     "lane": "messaging",  "step": 3},
+        {"id": "splunk",       "icon": "monitoring",     "label": "Splunk",            "zone": "on_prem", "lane": "monitoring", "step": 1},
+        {"id": "log_api",      "icon": "vpn",            "label": "Log Export API",    "zone": "how",     "lane": "monitoring", "step": 2},
+        {"id": "cloud_mon",    "icon": "monitoring",     "label": "Cloud Monitoring",  "zone": "gcp",     "lane": "monitoring", "step": 3},
     ],
     "edges": [
-        {"from": "ad",         "to": "gcds"},
-        {"from": "gcds",       "to": "cloud_iam"},
-        {"from": "cyberark",   "to": "vault_api"},
-        {"from": "vault_api",  "to": "secret_mgr"},
-        {"from": "oracle",     "to": "interconnect"},
-        {"from": "interconnect","to": "bigquery"},
-        {"from": "vmware",     "to": "ha_vpn"},
-        {"from": "ha_vpn",     "to": "gke"},
-        {"from": "kafka",      "to": "kafka_connect"},
-        {"from": "kafka_connect","to": "pubsub"},
-        {"from": "splunk",     "to": "log_api"},
-        {"from": "log_api",    "to": "cloud_mon"},
+        {"from": "ad",         "to": "gcds"},        {"from": "gcds",       "to": "cloud_iam"},
+        {"from": "cyberark",   "to": "vault_api"},   {"from": "vault_api",  "to": "secret_mgr"},
+        {"from": "oracle",     "to": "interconnect"},{"from": "interconnect","to": "bigquery"},
+        {"from": "vmware",     "to": "ha_vpn"},      {"from": "ha_vpn",     "to": "gke"},
+        {"from": "kafka",      "to": "kafka_connect"},{"from": "kafka_connect","to": "pubsub"},
+        {"from": "splunk",     "to": "log_api"},     {"from": "log_api",    "to": "cloud_mon"},
     ],
     "governance": [
-        {"icon": "iam",          "label": "IAM"},
-        {"icon": "kms",          "label": "KMS / CMEK"},
-        {"icon": "monitoring",   "label": "Monitoring"},
-        {"icon": "logging",      "label": "Audit Logs"},
-        {"icon": "firewall",     "label": "VPC-SC"},
-        {"icon": "dns",          "label": "Private DNS"},
+        {"icon": "iam", "label": "IAM"}, {"icon": "kms", "label": "KMS / CMEK"},
+        {"icon": "monitoring", "label": "Monitoring"}, {"icon": "logging", "label": "Audit Logs"},
+        {"icon": "firewall", "label": "VPC-SC"}, {"icon": "dns", "label": "Private DNS"},
     ],
     "bestPractices": [
-        {"category": "IDENTITY",    "tip": "GCDS syncs AD groups to Cloud Identity — never manage users in GCP directly"},
-        {"category": "SECRETS",     "tip": "CyberArk CCP API syncs credentials to Secret Manager — keys never exported"},
-        {"category": "NETWORK",     "tip": "Dedicated Interconnect for database replication (Oracle → BigQuery via DMS)"},
-        {"category": "NETWORK",     "tip": "HA Cloud VPN as backup or for smaller sites"},
-        {"category": "NETWORK",     "tip": "Private Service Connect — BigQuery, GCS, Cloud SQL accessed privately"},
-        {"category": "DATA",        "tip": "Database Migration Service for continuous Oracle → Cloud SQL replication"},
-        {"category": "MESSAGING",   "tip": "Kafka Connect with Pub/Sub sink connector — mirror topics to GCP"},
-        {"category": "SECURITY",    "tip": "VPC-SC perimeter around all GCP projects — blast radius containment"},
-        {"category": "COMPLIANCE",  "tip": "Cloud Logging exported back to Splunk for unified SIEM"},
+        {"category": "NETWORK", "tip": "Dedicated Interconnect for database replication"},
+        {"category": "NETWORK", "tip": "HA Cloud VPN as backup or for smaller sites"},
+        {"category": "SECURITY","tip": "VPC-SC perimeter around all GCP projects"},
     ],
 }
-
-
-# ═══════════════════════════════════════════════════════════
-#  3. AWS TO GCP (Multi-Cloud)
-# ═══════════════════════════════════════════════════════════
 
 AWS_TO_GCP = {
-    "title": "AWS to GCP Multi-Cloud Connectivity",
-    "layout": "pipeline",
-    "zones": ["aws_env", "connectivity", "identity_bridge", "gcp_network", "gcp_workloads", "shared_data"],
-    "lanes": ["networking", "identity", "data_path"],
+    "title": "AWS to GCP Multi-Cloud",
+    "zones": ["aws", "connectivity", "gcp_network", "gcp_workload"],
+    "lanes": ["networking", "identity", "data"],
     "nodes": [
-        # AWS Environment
-        {"id": "aws_vpc",         "icon": "firewall",        "label": "AWS VPC",              "zone": "aws_env",        "lane": "networking",    "step": 1},
-        {"id": "aws_iam",         "icon": "iam",             "label": "AWS IAM",              "zone": "aws_env",        "lane": "identity",      "step": 1},
-        {"id": "aws_s3",          "icon": "gcs",             "label": "S3 Buckets",           "zone": "aws_env",        "lane": "data_path"},
-        {"id": "aws_eks",         "icon": "gke",             "label": "EKS Clusters",         "zone": "aws_env",        "lane": "networking"},
-
-        # Connectivity
-        {"id": "aws_tgw",         "icon": "dns",             "label": "Transit Gateway",      "zone": "connectivity",   "lane": "networking",    "step": 2},
-        {"id": "partner_ic",      "icon": "vpn",             "label": "Partner Interconnect",  "zone": "connectivity",  "lane": "networking",    "step": 3},
-        {"id": "ha_vpn",          "icon": "vpn",             "label": "HA VPN (IPSec)",       "zone": "connectivity",   "lane": "data_path",     "step": 2},
-
-        # Identity Bridge
-        {"id": "wi_federation",   "icon": "iam",             "label": "WI Federation",        "zone": "identity_bridge","lane": "identity",      "step": 4},
-        {"id": "sts_token",       "icon": "kms",             "label": "STS Token Exchange",   "zone": "identity_bridge","lane": "identity"},
-        {"id": "cross_org_iam",   "icon": "iam",             "label": "Cross-Cloud IAM",      "zone": "identity_bridge","lane": "identity"},
-
-        # GCP Network
-        {"id": "gcp_vpc",         "icon": "firewall",        "label": "GCP Shared VPC",       "zone": "gcp_network",    "lane": "networking",    "step": 5},
-        {"id": "cloud_router_mc", "icon": "dns",             "label": "Cloud Router",         "zone": "gcp_network",    "lane": "networking"},
-        {"id": "vpc_sc_mc",       "icon": "firewall",        "label": "VPC-SC Perimeter",     "zone": "gcp_network",    "lane": "data_path",     "step": 5},
-
-        # GCP Workloads
-        {"id": "gke_multi",       "icon": "gke",             "label": "GKE (Multi-Cloud)",    "zone": "gcp_workloads",  "lane": "networking",    "step": 6},
-        {"id": "anthos",          "icon": "gke",             "label": "Anthos Fleet",         "zone": "gcp_workloads",  "lane": "identity"},
-
-        # Shared Data
-        {"id": "bq_omni",         "icon": "bigquery",        "label": "BigQuery Omni",        "zone": "shared_data",    "lane": "data_path",     "step": 7},
-        {"id": "gcs_transfer",    "icon": "gcs",             "label": "Storage Transfer",     "zone": "shared_data",    "lane": "data_path"},
-        {"id": "dataflow_cross",  "icon": "dataflow",        "label": "Cross-Cloud ETL",      "zone": "shared_data",    "lane": "networking",    "step": 7},
+        {"id": "aws_vpc",   "icon": "firewall", "label": "AWS VPC",          "zone": "aws",          "lane": "networking", "step": 1},
+        {"id": "tgw",       "icon": "dns",      "label": "Transit Gateway",  "zone": "connectivity", "lane": "networking", "step": 2},
+        {"id": "gcp_vpc",   "icon": "firewall", "label": "GCP Shared VPC",   "zone": "gcp_network",  "lane": "networking", "step": 3},
+        {"id": "gke",       "icon": "gke",      "label": "GKE Cluster",      "zone": "gcp_workload", "lane": "networking", "step": 4},
+        {"id": "aws_iam",   "icon": "iam",      "label": "AWS IAM",          "zone": "aws",          "lane": "identity",   "step": 1},
+        {"id": "wif",       "icon": "iam",      "label": "WI Federation",    "zone": "connectivity", "lane": "identity",   "step": 2},
+        {"id": "cross_iam", "icon": "iam",      "label": "Cross-Cloud IAM",  "zone": "gcp_network",  "lane": "identity",   "step": 3},
+        {"id": "anthos",    "icon": "gke",      "label": "Anthos Fleet",     "zone": "gcp_workload", "lane": "identity",   "step": 4},
+        {"id": "s3",        "icon": "gcs",      "label": "S3 Buckets",       "zone": "aws",          "lane": "data",       "step": 1},
+        {"id": "ha_vpn",    "icon": "vpn",      "label": "HA VPN (IPSec)",   "zone": "connectivity", "lane": "data",       "step": 2},
+        {"id": "vpc_sc",    "icon": "firewall", "label": "VPC-SC Perimeter", "zone": "gcp_network",  "lane": "data",       "step": 3},
+        {"id": "bq_omni",   "icon": "bigquery", "label": "BigQuery Omni",    "zone": "gcp_workload", "lane": "data",       "step": 4},
     ],
     "edges": [
-        # Network path
-        {"from": "aws_vpc",        "to": "aws_tgw"},
-        {"from": "aws_tgw",        "to": "partner_ic"},
-        {"from": "partner_ic",     "to": "gcp_vpc"},
-        {"from": "gcp_vpc",        "to": "cloud_router_mc"},
-        {"from": "gcp_vpc",        "to": "gke_multi"},
-        {"from": "aws_eks",        "to": "anthos"},
-
-        # Identity
-        {"from": "aws_iam",        "to": "wi_federation"},
-        {"from": "wi_federation",  "to": "sts_token"},
-        {"from": "sts_token",      "to": "cross_org_iam"},
-        {"from": "cross_org_iam",  "to": "anthos"},
-
-        # Data
-        {"from": "aws_s3",         "to": "ha_vpn"},
-        {"from": "ha_vpn",         "to": "vpc_sc_mc"},
-        {"from": "vpc_sc_mc",      "to": "bq_omni"},
-        {"from": "aws_s3",         "to": "gcs_transfer"},
-        {"from": "gke_multi",      "to": "dataflow_cross"},
+        {"from": "aws_vpc",  "to": "tgw"},       {"from": "tgw",      "to": "gcp_vpc"},   {"from": "gcp_vpc", "to": "gke"},
+        {"from": "aws_iam",  "to": "wif"},        {"from": "wif",      "to": "cross_iam"}, {"from": "cross_iam","to": "anthos"},
+        {"from": "s3",       "to": "ha_vpn"},     {"from": "ha_vpn",   "to": "vpc_sc"},    {"from": "vpc_sc",  "to": "bq_omni"},
+        {"from": "gcp_vpc",  "to": "vpc_sc"},     {"from": "cross_iam","to": "gke"},
     ],
     "governance": [
-        {"icon": "iam",          "label": "IAM"},
-        {"icon": "kms",          "label": "KMS / CMEK"},
-        {"icon": "monitoring",   "label": "Monitoring"},
-        {"icon": "logging",      "label": "Audit Logs"},
-        {"icon": "firewall",     "label": "VPC-SC"},
-        {"icon": "dataplex",     "label": "Dataplex"},
+        {"icon": "iam", "label": "IAM"}, {"icon": "kms", "label": "KMS / CMEK"},
+        {"icon": "monitoring", "label": "Monitoring"}, {"icon": "logging", "label": "Audit Logs"},
+        {"icon": "firewall", "label": "VPC-SC"}, {"icon": "dataplex", "label": "Dataplex"},
     ],
     "bestPractices": [
-        {"category": "NETWORK",     "tip": "Partner Interconnect when direct peering not available — 10 Gbps"},
-        {"category": "NETWORK",     "tip": "HA VPN with BGP as backup to Interconnect — auto-failover"},
-        {"category": "SECURITY",    "tip": "Workload Identity Federation — AWS IAM roles → GCP SA, no keys"},
-        {"category": "SECURITY",    "tip": "VPC-SC around all cross-cloud data access points"},
-        {"category": "SECURITY",    "tip": "STS token exchange for short-lived cross-cloud credentials"},
-        {"category": "RELIABILITY", "tip": "Anthos Fleet for unified management across EKS and GKE"},
-        {"category": "COST",        "tip": "BigQuery Omni to query S3 in-place — avoid data copy costs"},
-        {"category": "COMPLIANCE",  "tip": "Audit logs from both clouds into centralized SIEM"},
+        {"category": "NETWORK",  "tip": "Transit Gateway + Partner Interconnect for dedicated bandwidth"},
+        {"category": "SECURITY", "tip": "WIF — AWS IAM roles → GCP SA, no keys"},
+        {"category": "COST",     "tip": "BigQuery Omni to query S3 in-place — avoid data copy"},
     ],
 }
-
-
-# ═══════════════════════════════════════════════════════════
-#  4. AZURE TO GCP
-# ═══════════════════════════════════════════════════════════
 
 AZURE_TO_GCP = {
-    "title": "Azure to GCP Multi-Cloud Connectivity",
-    "layout": "pipeline",
-    "zones": ["azure_env", "connectivity", "identity_bridge", "gcp_network", "gcp_workloads", "shared_data"],
-    "lanes": ["networking", "identity", "data_path"],
+    "title": "Azure to GCP Multi-Cloud",
+    "zones": ["azure", "connectivity", "gcp_network", "gcp_workload"],
+    "lanes": ["networking", "identity", "data"],
     "nodes": [
-        # Azure
-        {"id": "azure_vnet",      "icon": "firewall",        "label": "Azure VNet",           "zone": "azure_env",      "lane": "networking",    "step": 1},
-        {"id": "azure_ad",        "icon": "users",           "label": "Azure AD (Entra ID)",  "zone": "azure_env",      "lane": "identity",      "step": 1},
-        {"id": "azure_blob",      "icon": "gcs",             "label": "Blob Storage",         "zone": "azure_env",      "lane": "data_path"},
-        {"id": "azure_aks",       "icon": "gke",             "label": "AKS Clusters",         "zone": "azure_env",      "lane": "networking"},
-
-        # Connectivity
-        {"id": "express_route",   "icon": "vpn",             "label": "ExpressRoute",         "zone": "connectivity",   "lane": "networking",    "step": 2},
-        {"id": "partner_ic_az",   "icon": "vpn",             "label": "Partner Interconnect",  "zone": "connectivity",  "lane": "networking",    "step": 3},
-        {"id": "ha_vpn_az",       "icon": "vpn",             "label": "HA VPN",               "zone": "connectivity",   "lane": "data_path",     "step": 2},
-
-        # Identity Bridge
-        {"id": "aad_federation",  "icon": "iam",             "label": "AAD → WI Fed",         "zone": "identity_bridge","lane": "identity",      "step": 4},
-        {"id": "saml_bridge",     "icon": "iam",             "label": "SAML Federation",      "zone": "identity_bridge","lane": "identity"},
-        {"id": "gcds_azure",      "icon": "iam",             "label": "GCDS (Azure AD)",      "zone": "identity_bridge","lane": "identity"},
-
-        # GCP Network
-        {"id": "gcp_vpc_az",      "icon": "firewall",        "label": "GCP Shared VPC",       "zone": "gcp_network",    "lane": "networking",    "step": 5},
-        {"id": "cloud_router_az", "icon": "dns",             "label": "Cloud Router",         "zone": "gcp_network",    "lane": "networking"},
-        {"id": "vpc_sc_az",       "icon": "firewall",        "label": "VPC-SC Perimeter",     "zone": "gcp_network",    "lane": "data_path",     "step": 5},
-
-        # GCP Workloads
-        {"id": "gke_az",          "icon": "gke",             "label": "GKE Cluster",          "zone": "gcp_workloads",  "lane": "networking",    "step": 6},
-        {"id": "anthos_az",       "icon": "gke",             "label": "Anthos Fleet",         "zone": "gcp_workloads",  "lane": "identity"},
-
-        # Shared Data
-        {"id": "bq_omni_az",      "icon": "bigquery",        "label": "BigQuery Omni",        "zone": "shared_data",    "lane": "data_path",     "step": 7},
-        {"id": "storage_transfer","icon": "gcs",             "label": "Storage Transfer",     "zone": "shared_data",    "lane": "data_path"},
+        {"id": "azure_vnet",    "icon": "firewall", "label": "Azure VNet",       "zone": "azure",        "lane": "networking", "step": 1},
+        {"id": "express_route", "icon": "vpn",      "label": "ExpressRoute",     "zone": "connectivity", "lane": "networking", "step": 2},
+        {"id": "gcp_vpc",       "icon": "firewall", "label": "GCP Shared VPC",   "zone": "gcp_network",  "lane": "networking", "step": 3},
+        {"id": "gke",           "icon": "gke",      "label": "GKE Cluster",      "zone": "gcp_workload", "lane": "networking", "step": 4},
+        {"id": "entra_id",      "icon": "users",    "label": "Entra ID",         "zone": "azure",        "lane": "identity",   "step": 1},
+        {"id": "saml_fed",      "icon": "iam",      "label": "SAML Federation",  "zone": "connectivity", "lane": "identity",   "step": 2},
+        {"id": "cloud_id",      "icon": "iam",      "label": "Cloud Identity",   "zone": "gcp_network",  "lane": "identity",   "step": 3},
+        {"id": "anthos",        "icon": "gke",      "label": "Anthos Fleet",     "zone": "gcp_workload", "lane": "identity",   "step": 4},
+        {"id": "blob",          "icon": "gcs",      "label": "Blob Storage",     "zone": "azure",        "lane": "data",       "step": 1},
+        {"id": "ha_vpn",        "icon": "vpn",      "label": "HA VPN",           "zone": "connectivity", "lane": "data",       "step": 2},
+        {"id": "vpc_sc",        "icon": "firewall", "label": "VPC-SC Perimeter", "zone": "gcp_network",  "lane": "data",       "step": 3},
+        {"id": "bq_omni",       "icon": "bigquery", "label": "BigQuery Omni",    "zone": "gcp_workload", "lane": "data",       "step": 4},
     ],
     "edges": [
-        {"from": "azure_vnet",     "to": "express_route"},
-        {"from": "express_route",  "to": "partner_ic_az"},
-        {"from": "partner_ic_az",  "to": "gcp_vpc_az"},
-        {"from": "gcp_vpc_az",     "to": "cloud_router_az"},
-        {"from": "gcp_vpc_az",     "to": "gke_az"},
-        {"from": "azure_aks",      "to": "anthos_az"},
-
-        {"from": "azure_ad",       "to": "aad_federation"},
-        {"from": "aad_federation", "to": "saml_bridge"},
-        {"from": "saml_bridge",    "to": "gcds_azure"},
-        {"from": "gcds_azure",     "to": "anthos_az"},
-
-        {"from": "azure_blob",     "to": "ha_vpn_az"},
-        {"from": "ha_vpn_az",      "to": "vpc_sc_az"},
-        {"from": "vpc_sc_az",      "to": "bq_omni_az"},
-        {"from": "azure_blob",     "to": "storage_transfer"},
+        {"from": "azure_vnet",   "to": "express_route"}, {"from": "express_route","to": "gcp_vpc"},   {"from": "gcp_vpc", "to": "gke"},
+        {"from": "entra_id",     "to": "saml_fed"},      {"from": "saml_fed",     "to": "cloud_id"},  {"from": "cloud_id","to": "anthos"},
+        {"from": "blob",         "to": "ha_vpn"},        {"from": "ha_vpn",       "to": "vpc_sc"},    {"from": "vpc_sc",  "to": "bq_omni"},
+        {"from": "gcp_vpc",      "to": "vpc_sc"},        {"from": "cloud_id",     "to": "gke"},
     ],
     "governance": [
-        {"icon": "iam",          "label": "IAM"},
-        {"icon": "kms",          "label": "KMS / CMEK"},
-        {"icon": "monitoring",   "label": "Monitoring"},
-        {"icon": "logging",      "label": "Audit Logs"},
-        {"icon": "firewall",     "label": "VPC-SC"},
-        {"icon": "dataplex",     "label": "Dataplex"},
+        {"icon": "iam", "label": "IAM"}, {"icon": "kms", "label": "KMS / CMEK"},
+        {"icon": "monitoring", "label": "Monitoring"}, {"icon": "logging", "label": "Audit Logs"},
+        {"icon": "firewall", "label": "VPC-SC"}, {"icon": "dataplex", "label": "Dataplex"},
     ],
     "bestPractices": [
-        {"category": "NETWORK",     "tip": "ExpressRoute to Partner Interconnect via shared peering provider"},
-        {"category": "SECURITY",    "tip": "Azure AD → Workload Identity Federation for cross-cloud auth"},
-        {"category": "SECURITY",    "tip": "SAML federation for user SSO across Azure and GCP consoles"},
-        {"category": "COST",        "tip": "BigQuery Omni for in-place queries on Azure Blob Storage"},
-        {"category": "RELIABILITY", "tip": "HA VPN as backup path to ExpressRoute/Interconnect"},
-        {"category": "COMPLIANCE",  "tip": "Unified audit logging from both clouds into single SIEM"},
+        {"category": "NETWORK",  "tip": "ExpressRoute to Partner Interconnect via shared peering"},
+        {"category": "SECURITY", "tip": "Entra ID → SAML Federation for cross-cloud SSO"},
+        {"category": "COST",     "tip": "BigQuery Omni for in-place queries on Blob Storage"},
     ],
 }
-
-
-# ═══════════════════════════════════════════════════════════
-#  5. GCP LANDING ZONE
-#  Org → Folders → Projects → Networking → IAM
-# ═══════════════════════════════════════════════════════════
 
 LANDING_ZONE = {
-    "title": "GCP Enterprise Landing Zone",
-    "layout": "pipeline",
-    "zones": ["org_level", "folder_structure", "shared_infra", "security_proj", "workload_proj", "operations"],
-    "lanes": ["governance", "networking", "workloads"],
+    "title": "GCP Landing Zone",
+    "zones": ["org_level", "shared_infra", "security", "workloads"],
+    "lanes": ["governance", "networking", "compute"],
     "nodes": [
-        # Org Level
-        {"id": "org_node",        "icon": "iam",             "label": "GCP Org Node",         "zone": "org_level",       "lane": "governance",   "step": 1},
-        {"id": "billing_acct",    "icon": "monitoring",      "label": "Billing Account",      "zone": "org_level",       "lane": "workloads"},
-        {"id": "org_policies_lz", "icon": "iam",             "label": "Org Policies",         "zone": "org_level",       "lane": "governance",   "step": 2},
-
-        # Folder Structure
-        {"id": "folder_shared",   "icon": "iam",             "label": "Shared/ Folder",       "zone": "folder_structure","lane": "networking",    "step": 3},
-        {"id": "folder_prod",     "icon": "iam",             "label": "Production/ Folder",   "zone": "folder_structure","lane": "workloads",     "step": 3},
-        {"id": "folder_dev",      "icon": "iam",             "label": "Dev/ Folder",          "zone": "folder_structure","lane": "governance"},
-
-        # Shared Infrastructure
-        {"id": "host_project",    "icon": "firewall",        "label": "VPC Host Project",     "zone": "shared_infra",    "lane": "networking",    "step": 4},
-        {"id": "hub_vpc",         "icon": "firewall",        "label": "Hub VPC",              "zone": "shared_infra",    "lane": "networking"},
-        {"id": "log_sink",        "icon": "logging",         "label": "Central Log Sink",     "zone": "shared_infra",    "lane": "governance",    "step": 4},
-
-        # Security Project
-        {"id": "sec_project",     "icon": "kms",             "label": "Security Project",     "zone": "security_proj",   "lane": "governance",    "step": 5},
-        {"id": "kms_project",     "icon": "kms",             "label": "KMS Key Rings",        "zone": "security_proj",   "lane": "governance"},
-        {"id": "scc_project",     "icon": "monitoring",      "label": "SCC Premium",          "zone": "security_proj",   "lane": "networking",    "step": 5},
-
-        # Workload Projects
-        {"id": "prod_project",    "icon": "gke",             "label": "Prod Project",         "zone": "workload_proj",   "lane": "workloads",     "step": 6},
-        {"id": "data_project",    "icon": "bigquery",        "label": "Data Project",         "zone": "workload_proj",   "lane": "workloads"},
-        {"id": "ml_project",      "icon": "vertex_ai",       "label": "ML Project",           "zone": "workload_proj",   "lane": "workloads"},
-        {"id": "svc_project_net", "icon": "firewall",        "label": "Service Project VPC",  "zone": "workload_proj",   "lane": "networking",    "step": 6},
-
-        # Operations
-        {"id": "monitoring_proj", "icon": "monitoring",      "label": "Monitoring Hub",       "zone": "operations",      "lane": "governance",    "step": 7},
-        {"id": "alerting",        "icon": "monitoring",      "label": "Alert Policies",       "zone": "operations",      "lane": "networking"},
-        {"id": "dashboard",       "icon": "looker",          "label": "Ops Dashboard",        "zone": "operations",      "lane": "workloads",     "step": 7},
+        {"id": "org_node",      "icon": "iam",        "label": "GCP Org Node",      "zone": "org_level",    "lane": "governance", "step": 1},
+        {"id": "host_project",  "icon": "firewall",   "label": "VPC Host Project",  "zone": "shared_infra", "lane": "governance", "step": 2},
+        {"id": "sec_project",   "icon": "kms",        "label": "Security Project",  "zone": "security",     "lane": "governance", "step": 3},
+        {"id": "ops_dashboard", "icon": "monitoring",  "label": "Ops Dashboard",     "zone": "workloads",    "lane": "governance", "step": 4},
+        {"id": "org_policies",  "icon": "firewall",   "label": "Org Policies",      "zone": "org_level",    "lane": "networking"},
+        {"id": "hub_vpc",       "icon": "firewall",   "label": "Hub VPC",           "zone": "shared_infra", "lane": "networking", "step": 2},
+        {"id": "scc",           "icon": "monitoring",  "label": "SCC Premium",       "zone": "security",     "lane": "networking"},
+        {"id": "svc_vpc",       "icon": "firewall",   "label": "Service VPC",       "zone": "workloads",    "lane": "networking"},
+        {"id": "billing",       "icon": "generic_db",  "label": "Billing Account",   "zone": "org_level",    "lane": "compute"},
+        {"id": "log_sink",      "icon": "logging",    "label": "Central Log Sink",  "zone": "shared_infra", "lane": "compute"},
+        {"id": "kms_project",   "icon": "kms",        "label": "KMS Key Rings",     "zone": "security",     "lane": "compute"},
+        {"id": "prod_project",  "icon": "gke",        "label": "Prod Project",      "zone": "workloads",    "lane": "compute", "step": 4},
     ],
     "edges": [
-        # Governance flow
-        {"from": "org_node",        "to": "org_policies_lz"},
-        {"from": "org_policies_lz", "to": "folder_dev"},
-        {"from": "org_policies_lz", "to": "folder_shared"},
-        {"from": "folder_dev",      "to": "log_sink"},
-        {"from": "log_sink",        "to": "sec_project"},
-        {"from": "sec_project",     "to": "kms_project"},
-        {"from": "sec_project",     "to": "monitoring_proj"},
-
-        # Networking flow
-        {"from": "folder_shared",   "to": "host_project"},
-        {"from": "host_project",    "to": "hub_vpc"},
-        {"from": "hub_vpc",         "to": "scc_project"},
-        {"from": "scc_project",     "to": "svc_project_net"},
-        {"from": "svc_project_net", "to": "alerting"},
-
-        # Workload flow
-        {"from": "billing_acct",    "to": "folder_prod"},
-        {"from": "folder_prod",     "to": "prod_project"},
-        {"from": "folder_prod",     "to": "data_project"},
-        {"from": "folder_prod",     "to": "ml_project"},
-        {"from": "prod_project",    "to": "dashboard"},
+        {"from": "org_node",     "to": "host_project"}, {"from": "host_project","to": "sec_project"}, {"from": "sec_project", "to": "ops_dashboard"},
+        {"from": "org_policies", "to": "hub_vpc"},       {"from": "hub_vpc",     "to": "scc"},          {"from": "scc",         "to": "svc_vpc"},
+        {"from": "billing",      "to": "log_sink"},      {"from": "log_sink",    "to": "kms_project"},  {"from": "kms_project", "to": "prod_project"},
+        {"from": "org_node",     "to": "org_policies"},  {"from": "host_project","to": "hub_vpc"},
+        {"from": "svc_vpc",      "to": "prod_project"},  {"from": "sec_project", "to": "kms_project"},
     ],
     "governance": [
-        {"icon": "iam",          "label": "IAM"},
-        {"icon": "kms",          "label": "KMS / CMEK"},
-        {"icon": "monitoring",   "label": "SCC Premium"},
-        {"icon": "logging",      "label": "Audit Logs"},
-        {"icon": "firewall",     "label": "Org Policies"},
-        {"icon": "dataplex",     "label": "Dataplex"},
+        {"icon": "iam", "label": "IAM"}, {"icon": "kms", "label": "KMS / CMEK"},
+        {"icon": "monitoring", "label": "Monitoring"}, {"icon": "logging", "label": "Audit Logs"},
+        {"icon": "firewall", "label": "VPC-SC"}, {"icon": "dataplex", "label": "Dataplex"},
     ],
     "bestPractices": [
-        {"category": "SECURITY",    "tip": "Org policies enforced at top — uniform bucket access, disable SA keys"},
-        {"category": "SECURITY",    "tip": "Separate security project for KMS, SCC — restricted admin access"},
-        {"category": "NETWORK",     "tip": "Shared VPC host project owns all networking — service projects consume"},
-        {"category": "NETWORK",     "tip": "Hub-and-spoke VPC topology for network segmentation"},
-        {"category": "COMPLIANCE",  "tip": "Central log sink: all audit logs → BigQuery in logging project"},
-        {"category": "COMPLIANCE",  "tip": "SCC Premium for vulnerability scanning and threat detection"},
-        {"category": "COST",        "tip": "Billing alerts per project folder — budget caps on non-prod"},
-        {"category": "RELIABILITY", "tip": "Separate projects per environment — blast radius isolation"},
+        {"category": "GOVERNANCE", "tip": "Org policies at org level — cascades to all folders/projects"},
+        {"category": "NETWORK",    "tip": "Hub-and-spoke VPC: host project owns network"},
+        {"category": "SECURITY",   "tip": "Dedicated security project for KMS, SCC, audit sinks"},
     ],
 }
-
-
-# ═══════════════════════════════════════════════════════════
-#  6. DATA ANALYTICS (Enhanced)
-# ═══════════════════════════════════════════════════════════
 
 DATA_ANALYTICS = {
     "title": "Data Analytics Architecture",
-    "layout": "pipeline",
     "zones": ["sources", "ingest", "process", "store", "analyze", "serve"],
     "lanes": ["streaming", "batch", "ml"],
     "nodes": [
-        {"id": "web_app",         "icon": "cloud_run",    "label": "Web App",              "zone": "sources",  "lane": "streaming"},
-        {"id": "mobile_events",   "icon": "functions",    "label": "Mobile Events",        "zone": "sources",  "lane": "streaming"},
-        {"id": "app_db",          "icon": "cloudsql",     "label": "Application DB",       "zone": "sources",  "lane": "batch"},
-        {"id": "partner_feeds",   "icon": "client",       "label": "Partner Feeds",        "zone": "sources",  "lane": "batch"},
+        {"id": "web_app",         "icon": "client",      "label": "Web App",          "zone": "sources",  "lane": "streaming", "step": 1},
+        {"id": "pubsub",          "icon": "pubsub",      "label": "Pub/Sub",          "zone": "ingest",   "lane": "streaming", "step": 2},
+        {"id": "dataflow_stream", "icon": "dataflow",    "label": "Dataflow Stream",  "zone": "process",  "lane": "streaming", "step": 3},
+        {"id": "gcs_bronze",      "icon": "gcs",         "label": "GCS Bronze",       "zone": "store",    "lane": "streaming", "step": 4},
+        {"id": "bigtable",        "icon": "bigtable",    "label": "Bigtable (RT)",    "zone": "analyze",  "lane": "streaming", "step": 5},
+        {"id": "memorystore",     "icon": "memorystore", "label": "Memorystore",      "zone": "serve",    "lane": "streaming", "step": 6},
 
-        {"id": "pubsub",          "icon": "pubsub",       "label": "Pub/Sub",              "zone": "ingest",   "lane": "streaming", "step": 1},
-        {"id": "composer",        "icon": "composer",      "label": "Cloud Composer",       "zone": "ingest",   "lane": "batch",     "step": 2},
+        {"id": "app_db",          "icon": "database",    "label": "Application DB",   "zone": "sources",  "lane": "batch"},
+        {"id": "composer",        "icon": "composer",    "label": "Cloud Composer",   "zone": "ingest",   "lane": "batch",     "step": 2},
+        {"id": "dataflow_batch",  "icon": "dataflow",    "label": "Dataflow Batch",   "zone": "process",  "lane": "batch",     "step": 4},
+        {"id": "gcs_silver",      "icon": "gcs",         "label": "GCS Silver",       "zone": "store",    "lane": "batch",     "step": 6},
+        {"id": "bq_analytics",    "icon": "bigquery",    "label": "BQ Analytics",     "zone": "analyze",  "lane": "batch",     "step": 8},
+        {"id": "api_endpoint",    "icon": "cloud_run",   "label": "API Endpoint",     "zone": "serve",    "lane": "batch"},
 
-        {"id": "dataflow_stream", "icon": "dataflow",     "label": "Dataflow Streaming",   "zone": "process",  "lane": "streaming", "step": 3},
-        {"id": "dataflow_batch",  "icon": "dataflow",     "label": "Dataflow Batch",       "zone": "process",  "lane": "batch",     "step": 4},
-        {"id": "dataproc_spark",  "icon": "dataproc",     "label": "Dataproc Spark",       "zone": "process",  "lane": "batch"},
-
-        {"id": "gcs_bronze",      "icon": "gcs",          "label": "GCS Bronze",           "zone": "store",    "lane": "streaming", "step": 5},
-        {"id": "gcs_silver",      "icon": "gcs",          "label": "GCS Silver",           "zone": "store",    "lane": "batch",     "step": 6},
-        {"id": "bigtable_rt",     "icon": "bigtable",     "label": "Bigtable (RT)",        "zone": "store",    "lane": "streaming"},
-        {"id": "bq_gold",         "icon": "bigquery",     "label": "BigQuery Gold",        "zone": "store",    "lane": "batch",     "step": 7},
-
-        {"id": "bq_analytics",    "icon": "bigquery",     "label": "BQ Analytics",         "zone": "analyze",  "lane": "batch",     "step": 8},
-        {"id": "vertex_ai",       "icon": "vertex_ai",    "label": "Vertex AI",            "zone": "analyze",  "lane": "ml",        "step": 9},
-        {"id": "looker",          "icon": "looker",        "label": "Looker Studio",       "zone": "analyze",  "lane": "batch"},
-
-        {"id": "cache",           "icon": "memorystore",  "label": "Memorystore",          "zone": "serve",    "lane": "streaming"},
-        {"id": "api_ep",          "icon": "cloud_run",    "label": "API Endpoint",         "zone": "serve",    "lane": "batch"},
-        {"id": "ml_ep",           "icon": "vertex_ai",    "label": "ML Endpoint",          "zone": "serve",    "lane": "ml"},
+        {"id": "vertex",          "icon": "vertex_ai",   "label": "Vertex AI",        "zone": "analyze",  "lane": "ml",        "step": 9},
+        {"id": "ml_endpoint",     "icon": "vertex_ai",   "label": "ML Endpoint",      "zone": "serve",    "lane": "ml"},
     ],
     "edges": [
-        {"from": "web_app",         "to": "pubsub"},
-        {"from": "mobile_events",   "to": "pubsub"},
-        {"from": "pubsub",          "to": "dataflow_stream"},
-        {"from": "dataflow_stream", "to": "gcs_bronze"},
-        {"from": "dataflow_stream", "to": "bigtable_rt"},
-        {"from": "bigtable_rt",     "to": "cache"},
-
-        {"from": "app_db",          "to": "composer"},
-        {"from": "partner_feeds",   "to": "composer"},
-        {"from": "composer",        "to": "dataflow_batch"},
-        {"from": "composer",        "to": "dataproc_spark"},
-        {"from": "dataflow_batch",  "to": "gcs_silver"},
-        {"from": "gcs_bronze",      "to": "gcs_silver"},
-        {"from": "gcs_silver",      "to": "bq_gold"},
-
-        {"from": "bq_gold",         "to": "bq_analytics"},
-        {"from": "bq_analytics",    "to": "looker"},
-        {"from": "bq_analytics",    "to": "api_ep"},
-        {"from": "bq_gold",         "to": "vertex_ai"},
-        {"from": "vertex_ai",       "to": "ml_ep"},
+        {"from": "web_app",        "to": "pubsub"},        {"from": "pubsub",         "to": "dataflow_stream"},
+        {"from": "dataflow_stream","to": "gcs_bronze"},    {"from": "gcs_bronze",     "to": "bigtable"},
+        {"from": "bigtable",       "to": "memorystore"},
+        {"from": "app_db",         "to": "composer"},       {"from": "composer",       "to": "dataflow_batch"},
+        {"from": "dataflow_batch", "to": "gcs_silver"},    {"from": "gcs_silver",     "to": "bq_analytics"},
+        {"from": "bq_analytics",   "to": "api_endpoint"},
+        {"from": "gcs_bronze",     "to": "gcs_silver"},
+        {"from": "bq_analytics",   "to": "vertex"},        {"from": "vertex",         "to": "ml_endpoint"},
     ],
     "governance": [
-        {"icon": "iam",          "label": "IAM"},
-        {"icon": "kms",          "label": "KMS / CMEK"},
-        {"icon": "monitoring",   "label": "Monitoring"},
-        {"icon": "logging",      "label": "Audit Logs"},
-        {"icon": "firewall",     "label": "VPC-SC"},
-        {"icon": "dns",          "label": "Private Connect"},
-        {"icon": "dataplex",     "label": "Dataplex"},
+        {"icon": "iam", "label": "IAM"}, {"icon": "kms", "label": "KMS / CMEK"},
+        {"icon": "monitoring", "label": "Monitoring"}, {"icon": "logging", "label": "Audit Logs"},
+        {"icon": "firewall", "label": "VPC-SC"}, {"icon": "dns", "label": "Private Connect"},
+        {"icon": "dataplex", "label": "Dataplex"},
     ],
     "bestPractices": [
-        {"category": "SECURITY",     "tip": "CMEK encryption on BigQuery, GCS, Bigtable, Cloud SQL"},
-        {"category": "SECURITY",     "tip": "VPC-SC perimeter around all data projects"},
-        {"category": "NETWORK",      "tip": "Private Service Connect for all Google API access"},
-        {"category": "RELIABILITY",  "tip": "Pub/Sub dead-letter topics for failed messages"},
-        {"category": "RELIABILITY",  "tip": "Cloud Composer 2 in HA mode with auto-scaling"},
-        {"category": "COST",         "tip": "Dataflow FlexRS for batch — up to 40% savings"},
-        {"category": "COST",         "tip": "GCS lifecycle rules — Bronze to Nearline after 30 days"},
-        {"category": "PERFORMANCE",  "tip": "BigQuery partitioned + clustered tables"},
-        {"category": "COMPLIANCE",   "tip": "Dataplex for metadata, lineage, and data quality"},
+        {"category": "DATA",        "tip": "Medallion: Bronze (raw) → Silver (cleansed) → Gold (business)"},
+        {"category": "PERFORMANCE", "tip": "Bigtable for sub-10ms reads, Memorystore for sub-1ms cache"},
+        {"category": "SECURITY",    "tip": "CMEK on all storage — separate keys per tier"},
     ],
 }
-
-
-# ═══════════════════════════════════════════════════════════
-#  ALL TEMPLATES INDEX
-# ═══════════════════════════════════════════════════════════
 
 TEMPLATES = {
-    "identity": {
-        "name": "Identity & Secrets",
-        "description": "AD → Cloud Identity → IAM → Workload Identity, CyberArk → Secret Manager",
-        "data": IDENTITY_SECRETS,
-    },
-    "onprem_gcp": {
-        "name": "On-Prem to GCP",
-        "description": "Interconnect, VPN, Shared VPC, DNS, PSC — enterprise hybrid connectivity",
-        "data": ONPREM_TO_GCP,
-    },
-    "aws_gcp": {
-        "name": "AWS to GCP",
-        "description": "Multi-cloud connectivity, identity federation, BigQuery Omni, Anthos",
-        "data": AWS_TO_GCP,
-    },
-    "azure_gcp": {
-        "name": "Azure to GCP",
-        "description": "ExpressRoute, AAD federation, cross-cloud data access",
-        "data": AZURE_TO_GCP,
-    },
-    "landing_zone": {
-        "name": "GCP Landing Zone",
-        "description": "Org, folders, projects, networking, IAM — enterprise foundation",
-        "data": LANDING_ZONE,
-    },
-    "data_analytics": {
-        "name": "Data Analytics",
-        "description": "Streaming + batch pipeline, medallion storage, ML, dashboards",
-        "data": DATA_ANALYTICS,
-    },
+    "identity":       {"name": "Identity & Secrets",  "description": "AD → Cloud Identity → IAM → WIF", "data": IDENTITY_SECRETS},
+    "onprem_gcp":     {"name": "On-Prem to GCP",      "description": "Tool-by-tool connectivity",        "data": ONPREM_TO_GCP},
+    "aws_gcp":        {"name": "AWS to GCP",           "description": "Multi-cloud networking + identity","data": AWS_TO_GCP},
+    "azure_gcp":      {"name": "Azure to GCP",         "description": "Entra ID, ExpressRoute, BQ Omni", "data": AZURE_TO_GCP},
+    "landing_zone":   {"name": "GCP Landing Zone",     "description": "Org, projects, networking, IAM",  "data": LANDING_ZONE},
+    "data_analytics": {"name": "Data Analytics",       "description": "Streaming + batch + ML pipeline", "data": DATA_ANALYTICS},
 }
 
-
-# ═══════════════════════════════════════════════════════════
-#  HEALTHCARE DIAGNOSTICS — Unified Agentic Platform
-# ═══════════════════════════════════════════════════════════
-
+# Diagnostics Agentic
 DIAGNOSTICS_AGENTIC = {
     "title": "Diagnostics Agentic Platform",
-    "layout": "layered",
-    "zones": ["input", "orchestrate", "process", "connect", "store", "govern"],
+    "zones": ["input", "orchestrate", "process", "connect", "store"],
     "lanes": ["experience", "control", "agents", "protocols", "intelligence", "data"],
     "nodes": [
-        # ── EXPERIENCE: Who uses it
-        {"id": "physician_portal",  "icon": "users",       "label": "Physician Portal",  "zone": "input",       "lane": "experience", "step": 1},
-        {"id": "patient_portal",    "icon": "client",      "label": "Patient Portal",    "zone": "orchestrate", "lane": "experience", "step": 2},
-        {"id": "lab_dashboard",     "icon": "monitoring",   "label": "Lab Tech UI",       "zone": "process",     "lane": "experience", "step": 3},
-
-        # ── CONTROL: Master Agent + Guardrails
-        {"id": "master_agent",      "icon": "iam",         "label": "Master Agent",      "zone": "orchestrate", "lane": "control",    "step": 4},
-        {"id": "guardrails",        "icon": "firewall",    "label": "Guardrails",        "zone": "connect",     "lane": "control",    "step": 5},
-
-        # ── AGENTS: Specialists
-        {"id": "test_agent",        "icon": "monitoring",  "label": "Test Agent",        "zone": "input",       "lane": "agents"},
-        {"id": "specimen_agent",    "icon": "gcs",         "label": "Specimen Agent",    "zone": "orchestrate", "lane": "agents"},
-        {"id": "results_agent",     "icon": "bigquery",    "label": "Results Agent",     "zone": "process",     "lane": "agents"},
-        {"id": "ai_companion",      "icon": "vertex_ai",   "label": "AI Companion",      "zone": "connect",     "lane": "agents"},
-        {"id": "billing_agent",     "icon": "generic_db",  "label": "Billing Agent",     "zone": "store",       "lane": "agents"},
-        {"id": "compliance_agent",  "icon": "kms",         "label": "Compliance Agent",  "zone": "govern",      "lane": "agents"},
-
-        # ── PROTOCOLS: How agents talk
-        {"id": "mcp_lis",           "icon": "pubsub",      "label": "MCP (LIS/EHR)",     "zone": "input",       "lane": "protocols"},
-        {"id": "a2a",               "icon": "dataflow",    "label": "A2A Protocol",      "zone": "process",     "lane": "protocols"},
-        {"id": "fhir_hl7",          "icon": "dns",         "label": "FHIR / HL7",        "zone": "store",       "lane": "protocols"},
-
-        # ── INTELLIGENCE: Brains
-        {"id": "llm_gateway",       "icon": "cloud_run",   "label": "LLM Gateway",       "zone": "input",       "lane": "intelligence"},
-        {"id": "test_compendium",   "icon": "bigtable",    "label": "Test Compendium",   "zone": "orchestrate", "lane": "intelligence"},
-        {"id": "rag_pipeline",      "icon": "dataflow",    "label": "RAG Pipeline",      "zone": "process",     "lane": "intelligence"},
-        {"id": "vector_db",         "icon": "spanner",     "label": "Vector DB",         "zone": "connect",     "lane": "intelligence"},
-
-        # ── DATA: Sources
-        {"id": "lis",               "icon": "database",    "label": "LIS",               "zone": "input",       "lane": "data"},
-        {"id": "ehr_epic",          "icon": "client",      "label": "EHR / EPIC",        "zone": "orchestrate", "lane": "data"},
-        {"id": "bq",               "icon": "bigquery",    "label": "BigQuery",          "zone": "process",     "lane": "data"},
-        {"id": "gcs_store",        "icon": "gcs",         "label": "GCS",               "zone": "connect",     "lane": "data"},
-        {"id": "salesforce",        "icon": "client",      "label": "Salesforce",        "zone": "store",       "lane": "data"},
-        {"id": "sharepoint",        "icon": "client",      "label": "SharePoint",        "zone": "govern",      "lane": "data"},
+        {"id": "physician_portal", "icon": "users",      "label": "Physician Portal", "zone": "input",       "lane": "experience", "step": 1},
+        {"id": "patient_portal",   "icon": "client",     "label": "Patient Portal",   "zone": "orchestrate", "lane": "experience", "step": 2},
+        {"id": "lab_dashboard",    "icon": "monitoring",  "label": "Lab Tech UI",      "zone": "process",     "lane": "experience", "step": 3},
+        {"id": "master_agent",     "icon": "iam",        "label": "Master Agent",     "zone": "orchestrate", "lane": "control",    "step": 4},
+        {"id": "guardrails",       "icon": "firewall",   "label": "Guardrails",       "zone": "connect",     "lane": "control",    "step": 5},
+        {"id": "test_agent",       "icon": "monitoring",  "label": "Test Agent",       "zone": "input",       "lane": "agents"},
+        {"id": "specimen_agent",   "icon": "gcs",        "label": "Specimen Agent",   "zone": "orchestrate", "lane": "agents"},
+        {"id": "results_agent",    "icon": "bigquery",   "label": "Results Agent",    "zone": "process",     "lane": "agents"},
+        {"id": "ai_companion",     "icon": "vertex_ai",  "label": "AI Companion",     "zone": "connect",     "lane": "agents"},
+        {"id": "billing_agent",    "icon": "generic_db",  "label": "Billing Agent",    "zone": "store",       "lane": "agents"},
+        {"id": "mcp_lis",          "icon": "pubsub",     "label": "MCP (LIS/EHR)",    "zone": "input",       "lane": "protocols"},
+        {"id": "a2a",              "icon": "dataflow",   "label": "A2A Protocol",     "zone": "process",     "lane": "protocols"},
+        {"id": "fhir_hl7",         "icon": "dns",        "label": "FHIR / HL7",       "zone": "store",       "lane": "protocols"},
+        {"id": "llm_gateway",      "icon": "cloud_run",  "label": "LLM Gateway",      "zone": "input",       "lane": "intelligence"},
+        {"id": "test_compendium",  "icon": "bigtable",   "label": "Test Compendium",  "zone": "orchestrate", "lane": "intelligence"},
+        {"id": "rag_pipeline",     "icon": "dataflow",   "label": "RAG Pipeline",     "zone": "process",     "lane": "intelligence"},
+        {"id": "vector_db",        "icon": "spanner",    "label": "Vector DB",        "zone": "connect",     "lane": "intelligence"},
+        {"id": "lis",              "icon": "database",   "label": "LIS",              "zone": "input",       "lane": "data"},
+        {"id": "ehr_epic",         "icon": "client",     "label": "EHR / EPIC",       "zone": "orchestrate", "lane": "data"},
+        {"id": "bq",               "icon": "bigquery",   "label": "BigQuery",         "zone": "process",     "lane": "data"},
+        {"id": "gcs_store",        "icon": "gcs",        "label": "GCS",              "zone": "connect",     "lane": "data"},
+        {"id": "salesforce",       "icon": "client",     "label": "Salesforce",       "zone": "store",       "lane": "data"},
     ],
     "edges": [
-        # Experience → Master Agent
-        {"from": "physician_portal", "to": "master_agent"},
-        {"from": "patient_portal",   "to": "master_agent"},
-        {"from": "lab_dashboard",    "to": "master_agent"},
-
-        # Master Agent → Guardrails → Agents
-        {"from": "master_agent",     "to": "guardrails"},
-        {"from": "guardrails",       "to": "test_agent"},
-        {"from": "guardrails",       "to": "specimen_agent"},
-        {"from": "guardrails",       "to": "results_agent"},
-        {"from": "guardrails",       "to": "ai_companion"},
-        {"from": "guardrails",       "to": "billing_agent"},
-        {"from": "guardrails",       "to": "compliance_agent"},
-
-        # Agent-to-Agent via A2A
-        {"from": "test_agent",       "to": "a2a"},
-        {"from": "specimen_agent",   "to": "a2a"},
-        {"from": "results_agent",    "to": "a2a"},
-        {"from": "billing_agent",    "to": "a2a"},
-
-        # Agents → MCP (external systems)
-        {"from": "test_agent",       "to": "mcp_lis"},
-        {"from": "specimen_agent",   "to": "mcp_lis"},
-        {"from": "results_agent",    "to": "fhir_hl7"},
-        {"from": "billing_agent",    "to": "fhir_hl7"},
-
-        # Agents → Intelligence
-        {"from": "ai_companion",     "to": "llm_gateway"},
-        {"from": "test_agent",       "to": "test_compendium"},
-        {"from": "results_agent",    "to": "rag_pipeline"},
-        {"from": "compliance_agent", "to": "rag_pipeline"},
-        {"from": "rag_pipeline",     "to": "vector_db"},
-        {"from": "llm_gateway",      "to": "rag_pipeline"},
-
-        # MCP / Protocols → Data
-        {"from": "mcp_lis",          "to": "lis"},
-        {"from": "mcp_lis",          "to": "ehr_epic"},
-        {"from": "fhir_hl7",        "to": "ehr_epic"},
+        {"from": "physician_portal","to": "master_agent"}, {"from": "patient_portal","to": "master_agent"},
+        {"from": "lab_dashboard",   "to": "master_agent"}, {"from": "master_agent",  "to": "guardrails"},
+        {"from": "guardrails",      "to": "test_agent"},   {"from": "guardrails",    "to": "specimen_agent"},
+        {"from": "guardrails",      "to": "results_agent"},{"from": "guardrails",    "to": "ai_companion"},
+        {"from": "guardrails",      "to": "billing_agent"},
+        {"from": "test_agent",      "to": "mcp_lis"},      {"from": "results_agent", "to": "a2a"},
+        {"from": "billing_agent",   "to": "fhir_hl7"},
+        {"from": "ai_companion",    "to": "llm_gateway"},  {"from": "test_agent",    "to": "test_compendium"},
+        {"from": "results_agent",   "to": "rag_pipeline"}, {"from": "rag_pipeline",  "to": "vector_db"},
+        {"from": "mcp_lis",         "to": "lis"},           {"from": "mcp_lis",       "to": "ehr_epic"},
         {"from": "fhir_hl7",        "to": "salesforce"},
-
-        # Intelligence → Data
-        {"from": "test_compendium",  "to": "bq"},
-        {"from": "vector_db",        "to": "gcs_store"},
-        {"from": "rag_pipeline",     "to": "bq"},
+        {"from": "test_compendium", "to": "bq"},            {"from": "vector_db",     "to": "gcs_store"},
     ],
     "governance": [
-        {"icon": "iam",          "label": "IAM"},
-        {"icon": "kms",          "label": "HIPAA / CLIA"},
-        {"icon": "monitoring",   "label": "Monitoring"},
-        {"icon": "logging",      "label": "Audit Trail"},
-        {"icon": "firewall",     "label": "PHI Encrypt"},
-        {"icon": "dns",          "label": "VPC-SC"},
+        {"icon": "iam", "label": "IAM"}, {"icon": "kms", "label": "HIPAA / CLIA"},
+        {"icon": "monitoring", "label": "Monitoring"}, {"icon": "logging", "label": "Audit Trail"},
+        {"icon": "firewall", "label": "PHI Encrypt"}, {"icon": "dns", "label": "VPC-SC"},
     ],
     "bestPractices": [
-        {"category": "SECURITY",    "tip": "All PHI encrypted at rest (CMEK) and in transit (mTLS)"},
-        {"category": "COMPLIANCE",  "tip": "Every agent decision logged to immutable audit trail"},
-        {"category": "COMPLIANCE",  "tip": "HIPAA BAA in place for all cloud services processing PHI"},
-        {"category": "COMPLIANCE",  "tip": "CLIA/CAP compliance checks automated via Compliance Agent"},
-        {"category": "GUARDRAILS",  "tip": "PHI/PII detection on all inputs and outputs"},
-        {"category": "GUARDRAILS",  "tip": "Critical lab values trigger mandatory human-in-the-loop"},
-        {"category": "RELIABILITY", "tip": "Master Agent escalates to human when confidence < threshold"},
-        {"category": "RELIABILITY", "tip": "A2A protocol ensures agent handoffs are tracked end-to-end"},
+        {"category": "SECURITY",   "tip": "All PHI encrypted at rest (CMEK) and in transit (mTLS)"},
+        {"category": "COMPLIANCE", "tip": "Every agent decision logged to immutable audit trail"},
+        {"category": "GUARDRAILS", "tip": "Critical lab values trigger mandatory human-in-the-loop"},
+    ],
+}
+TEMPLATES["diagnostics_agentic"] = {"name": "Diagnostics Agentic Platform", "description": "Healthcare diagnostics agents", "data": DIAGNOSTICS_AGENTIC}
+
+
+# ═══════════════════════════════════════════════════════════
+#  CONNECTIVITY PATTERN — The Complete Foundation
+#
+#  Everything linked. Identity creates SAs. SAs get tokens.
+#  Tokens + secrets = workload authenticates. Network carries
+#  the traffic. Enforcement controls it all. Observability
+#  watches every step.
+#
+#  THIS is the pattern. Every architecture rides on it.
+# ═══════════════════════════════════════════════════════════
+
+CONNECTIVITY_PATTERN = {
+    "title": "Connectivity Pattern",
+    "zones": ["corporate", "boundary", "gcp_control", "workload"],
+    "lanes": ["identity", "service_acct", "secrets", "network", "enforcement", "observability"],
+    "nodes": [
+        # IDENTITY: How humans prove who they are
+        {"id": "ad",             "icon": "users",          "label": "Active Directory",  "zone": "corporate",   "lane": "identity",      "step": 1},
+        {"id": "entra",          "icon": "users",          "label": "Entra ID",          "zone": "boundary",    "lane": "identity",      "step": 2},
+        {"id": "cloud_id",       "icon": "iam",            "label": "Cloud Identity",    "zone": "gcp_control", "lane": "identity",      "step": 3},
+        {"id": "iam_roles",      "icon": "iam",            "label": "IAM Roles",         "zone": "workload",    "lane": "identity",      "step": 4},
+
+        # SERVICE ACCOUNTS: How apps authenticate (no keys)
+        {"id": "onprem_app",     "icon": "compute_engine", "label": "On-Prem App",       "zone": "corporate",   "lane": "service_acct",  "step": 1},
+        {"id": "wif",            "icon": "iam",            "label": "WI Federation",     "zone": "boundary",    "lane": "service_acct",  "step": 2},
+        {"id": "gcp_sa",         "icon": "iam",            "label": "GCP Service Acct",  "zone": "gcp_control", "lane": "service_acct",  "step": 3},
+        {"id": "token",          "icon": "kms",            "label": "Short-Lived Token", "zone": "workload",    "lane": "service_acct",  "step": 4},
+
+        # SECRETS: How credentials flow and rotate
+        {"id": "cyberark",       "icon": "kms",            "label": "CyberArk Vault",    "zone": "corporate",   "lane": "secrets",       "step": 1},
+        {"id": "ccp_sync",       "icon": "vpn",            "label": "CCP API Sync",      "zone": "boundary",    "lane": "secrets",       "step": 2},
+        {"id": "secret_mgr",     "icon": "kms",            "label": "Secret Manager",    "zone": "gcp_control", "lane": "secrets",       "step": 3},
+        {"id": "inject",         "icon": "gke",            "label": "Workload Inject",   "zone": "workload",    "lane": "secrets",       "step": 4},
+
+        # NETWORK: The physical path — no public internet
+        {"id": "corp_lan",       "icon": "client",         "label": "Corp Network",      "zone": "corporate",   "lane": "network",       "step": 1},
+        {"id": "interconnect",   "icon": "vpn",            "label": "Interconnect",      "zone": "boundary",    "lane": "network",       "step": 2},
+        {"id": "shared_vpc",     "icon": "firewall",       "label": "Shared VPC",        "zone": "gcp_control", "lane": "network",       "step": 3},
+        {"id": "psc",            "icon": "dns",            "label": "PSC Endpoint",      "zone": "workload",    "lane": "network",       "step": 4},
+
+        # ENFORCEMENT: Guardrails that prevent misconfiguration
+        {"id": "ad_groups",      "icon": "users",          "label": "AD Groups",         "zone": "corporate",   "lane": "enforcement"},
+        {"id": "domain_restrict","icon": "firewall",       "label": "Domain Restrict",   "zone": "boundary",    "lane": "enforcement"},
+        {"id": "vpc_sc",         "icon": "firewall",       "label": "VPC-SC Perimeter",  "zone": "gcp_control", "lane": "enforcement"},
+        {"id": "cond_iam",       "icon": "firewall",       "label": "Conditional IAM",   "zone": "workload",    "lane": "enforcement"},
+
+        # OBSERVABILITY: How you know it's working
+        {"id": "siem",           "icon": "monitoring",     "label": "SIEM / Splunk",     "zone": "corporate",   "lane": "observability"},
+        {"id": "audit_log",      "icon": "logging",        "label": "Audit Events",      "zone": "boundary",    "lane": "observability"},
+        {"id": "cloud_logging",  "icon": "logging",        "label": "Cloud Logging",     "zone": "gcp_control", "lane": "observability"},
+        {"id": "alerts",         "icon": "monitoring",     "label": "Monitoring/Alerts",  "zone": "workload",    "lane": "observability"},
+    ],
+    "edges": [
+        # ── Horizontal: each lane's own chain
+        # Identity
+        {"from": "ad",             "to": "entra"},
+        {"from": "entra",          "to": "cloud_id"},
+        {"from": "cloud_id",       "to": "iam_roles"},
+        # Service accounts
+        {"from": "onprem_app",     "to": "wif"},
+        {"from": "wif",            "to": "gcp_sa"},
+        {"from": "gcp_sa",         "to": "token"},
+        # Secrets
+        {"from": "cyberark",       "to": "ccp_sync"},
+        {"from": "ccp_sync",       "to": "secret_mgr"},
+        {"from": "secret_mgr",     "to": "inject"},
+        # Network
+        {"from": "corp_lan",       "to": "interconnect"},
+        {"from": "interconnect",   "to": "shared_vpc"},
+        {"from": "shared_vpc",     "to": "psc"},
+        # Enforcement
+        {"from": "ad_groups",      "to": "domain_restrict"},
+        {"from": "domain_restrict","to": "vpc_sc"},
+        {"from": "vpc_sc",         "to": "cond_iam"},
+        # Observability
+        {"from": "siem",           "to": "audit_log"},
+        {"from": "audit_log",      "to": "cloud_logging"},
+        {"from": "cloud_logging",  "to": "alerts"},
+
+        # ── Cross-lane: HOW THEY LINK
+        # Identity creates service accounts
+        {"from": "cloud_id",       "to": "gcp_sa"},
+        # IAM roles authorize the token
+        {"from": "iam_roles",      "to": "token"},
+        # Token + secret = workload can authenticate
+        {"from": "token",          "to": "inject"},
+        # Workload reaches resource via network
+        {"from": "inject",         "to": "psc"},
+        # Enforcement controls network
+        {"from": "vpc_sc",         "to": "shared_vpc"},
+        # Enforcement controls SA
+        {"from": "cond_iam",       "to": "token"},
+        # Observability watches identity
+        {"from": "cloud_id",       "to": "cloud_logging"},
+        # Observability watches network
+        {"from": "shared_vpc",     "to": "cloud_logging"},
+        # Observability watches secrets
+        {"from": "secret_mgr",     "to": "cloud_logging"},
+    ],
+    "governance": [],
+    "bestPractices": [
+        {"category": "IDENTITY",      "tip": "AD → Entra ID → Cloud Identity. One-way sync. Never manage users in GCP directly."},
+        {"category": "SERVICE_ACCT",   "tip": "Workload Identity Federation replaces SA keys. Zero exported credentials."},
+        {"category": "SECRETS",        "tip": "CyberArk → Secret Manager via CCP API. Auto-rotate every 90 days."},
+        {"category": "NETWORK",        "tip": "Dedicated Interconnect + PSC. No public IPs, no public endpoints."},
+        {"category": "ENFORCEMENT",    "tip": "VPC-SC perimeter. Domain restriction. SA key creation disabled org-wide."},
+        {"category": "OBSERVABILITY",  "tip": "Every IAM change, every secret access, every network flow → Cloud Logging → Alerts."},
     ],
 }
 
-# Update TEMPLATES index
-TEMPLATES["diagnostics_agentic"] = {
-    "name": "Diagnostics Agentic Platform",
-    "description": "Healthcare diagnostics — Master Agent, Guardrails, Specialist Agents, MCP, A2A",
-    "data": DIAGNOSTICS_AGENTIC,
+TEMPLATES["connectivity"] = {
+    "name": "Connectivity Pattern",
+    "description": "The complete foundation — identity, SA, secrets, network, enforcement, observability — all linked",
+    "data": CONNECTIVITY_PATTERN,
 }

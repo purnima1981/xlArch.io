@@ -21,9 +21,7 @@ def render(architecture):
     """Render architecture to a list of draw commands. Canvas + PPTX both consume this."""
     commands = []
 
-    # Governance rendered as compact pattern bar — not full cards
     arch = dict(architecture)
-    gov = arch.get("governance", [])
     zones = list(arch.get("zones", []))
     lanes = list(arch.get("lanes", []))
     nodes = list(arch.get("nodes", []))
@@ -170,34 +168,6 @@ def render(architecture):
             commands.append({"type": "text", "x": bx, "y": by + 1, "w": bsz,
                             "text": str(n["step"]), "size": 8, "color": "#FFFFFF",
                             "bold": True, "align": "center", "nodeId": nid})
-
-    # ── Governance pattern bar (compact, bottom — same for every architecture)
-    if gov:
-        bar_y = ch - 10
-        bar_h = 40
-        bar_w = max(cw - 50, len(gov) * 140)
-        ch = bar_y + bar_h + 25
-
-        # Subtle background strip
-        commands.append({"type": "rect", "x": 25, "y": bar_y, "w": bar_w, "h": bar_h,
-                        "fill": "#F5F5F5", "stroke": "#E0E0E0", "stroke_width": 0.3, "radius": 8, "opacity": 0.5})
-
-        # "PATTERNS" label
-        commands.append({"type": "text", "x": 35, "y": bar_y + 6, "w": 80,
-                        "text": "PATTERNS", "size": 6, "color": "#9E9E9E", "bold": True, "align": "left"})
-
-        # Compact icon + label pairs
-        gIW = 22
-        spacing = min(140, (bar_w - 100) / max(len(gov), 1))
-        start_x = 110
-        for i, g in enumerate(gov):
-            gx = start_x + i * spacing
-            gy = bar_y + 8
-            commands.append({"type": "image", "x": gx, "y": gy,
-                            "w": gIW, "h": gIW, "src": g.get("icon", "")})
-            commands.append({"type": "text", "x": gx + gIW + 4, "y": gy + 2, "w": 90,
-                            "text": g.get("label", ""), "size": 8, "color": "#666",
-                            "bold": False, "align": "left"})
 
     return {"commands": commands, "width": cw, "height": ch, "positions": positions, "architecture": arch}
 
