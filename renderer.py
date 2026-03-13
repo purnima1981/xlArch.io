@@ -21,28 +21,13 @@ def render(architecture):
     """Render architecture to a list of draw commands. Canvas + PPTX both consume this."""
     commands = []
 
-    # Merge governance into regular nodes — no special box, just another lane
+    # Governance rendered as compact pattern bar — not full cards
     arch = dict(architecture)
     gov = arch.get("governance", [])
     zones = list(arch.get("zones", []))
     lanes = list(arch.get("lanes", []))
     nodes = list(arch.get("nodes", []))
     edges = list(arch.get("edges", []))
-
-    if gov:
-        if "security" not in lanes:
-            lanes.append("security")
-        # Spread gov nodes evenly — one per zone. If more gov than zones, wrap around
-        for i, g in enumerate(gov):
-            gid = f"gov_{g.get('icon', i)}"
-            zone_idx = min(i, len(zones) - 1) if zones else 0
-            nodes.append({
-                "id": gid,
-                "icon": g.get("icon", ""),
-                "label": g.get("label", ""),
-                "zone": zones[zone_idx] if zones else "sources",
-                "lane": "security",
-            })
 
     arch["zones"] = zones
     arch["lanes"] = lanes
@@ -89,21 +74,62 @@ def render(architecture):
         commands.append({"type": "text", "x": LP + i * zone_gap, "y": 50, "w": NW + 20,
                         "text": label, "size": 7, "color": "#9E9E9E", "bold": True, "align": "center"})
 
-    # ── Edges (orthogonal)
+    # ── Edges (smart orthogonal routing)
+    # Track used midpoints to offset parallel arrows
+    used_mid = {}
+
     for e in edges:
         fp, tp = positions.get(e["from"]), positions.get(e["to"])
         if not fp or not tp:
             continue
-        x1, y1 = fp["x"] + NW + 5, fp["y"] + NH / 2
-        x2, y2 = tp["x"] - 5, tp["y"] + NH / 2
 
-        if abs(y1 - y2) < 5:
-            # Same lane — straight
-            points = [(x1, y1), (x2, y2)]
+        fx, fy = fp["x"], fp["y"]
+        tx, ty = tp["x"], tp["y"]
+        fcx, fcy = fx + NW / 2, fy + NH / 2  # from center
+        tcx, tcy = tx + NW / 2, ty + NH / 2  # to center
+
+        dx = tcx - fcx
+        dy = tcy - fcy
+
+        GAP = 8  # gap from node edge
+
+        if abs(dy) < 10:
+            # Same lane — horizontal
+            if dx > 0:
+                # Left to right
+                points = [(fx + NW + GAP, fcy), (tx - GAP, tcy)]
+            else:
+                # Right to left — route around bottom
+                bot = max(fy, ty) + NH + 25
+                points = [(fx + NW + GAP, fcy), (fx + NW + GAP, bot),
+                           (tx - GAP, bot), (tx - GAP, tcy)]
+
+        elif abs(dx) < 10:
+            # Same zone — vertical
+            if dy > 0:
+                points = [(fcx, fy + NH + GAP), (tcx, ty - GAP)]
+            else:
+                points = [(fcx, fy - GAP), (tcx, ty + NH + GAP)]
+
+        elif dx > 0:
+            # Forward + cross-lane — L-shape exit right, enter left
+            mid_key = round((fx + NW + tx) / 2 / 20) * 20
+            offset = used_mid.get(mid_key, 0) * 12
+            used_mid[mid_key] = used_mid.get(mid_key, 0) + 1
+            midX = (fx + NW + tx) / 2 + offset
+
+            points = [(fx + NW + GAP, fcy), (midX, fcy), (midX, tcy), (tx - GAP, tcy)]
+
         else:
-            # Cross-lane — L-shape
-            midX = (x1 + x2) / 2
-            points = [(x1, y1), (midX, y1), (midX, y2), (x2, y2)]
+            # Backward + cross-lane — route around
+            if dy > 0:
+                midY = fy + NH + 25
+                points = [(fx + NW + GAP, fcy), (fx + NW + GAP, midY),
+                           (tx - GAP, midY), (tx - GAP, tcy)]
+            else:
+                midY = ty + NH + 25
+                points = [(fcx, fy - GAP), (fcx, midY),
+                           (tx - GAP, midY), (tx - GAP, tcy)]
 
         commands.append({"type": "arrow", "points": points,
                         "color": ARROW_COLOR, "width": 2,
@@ -145,6 +171,34 @@ def render(architecture):
                             "text": str(n["step"]), "size": 8, "color": "#FFFFFF",
                             "bold": True, "align": "center", "nodeId": nid})
 
+    # ── Governance pattern bar (compact, bottom — same for every architecture)
+    if gov:
+        bar_y = ch - 10
+        bar_h = 40
+        bar_w = max(cw - 50, len(gov) * 140)
+        ch = bar_y + bar_h + 25
+
+        # Subtle background strip
+        commands.append({"type": "rect", "x": 25, "y": bar_y, "w": bar_w, "h": bar_h,
+                        "fill": "#F5F5F5", "stroke": "#E0E0E0", "stroke_width": 0.3, "radius": 8, "opacity": 0.5})
+
+        # "PATTERNS" label
+        commands.append({"type": "text", "x": 35, "y": bar_y + 6, "w": 80,
+                        "text": "PATTERNS", "size": 6, "color": "#9E9E9E", "bold": True, "align": "left"})
+
+        # Compact icon + label pairs
+        gIW = 22
+        spacing = min(140, (bar_w - 100) / max(len(gov), 1))
+        start_x = 110
+        for i, g in enumerate(gov):
+            gx = start_x + i * spacing
+            gy = bar_y + 8
+            commands.append({"type": "image", "x": gx, "y": gy,
+                            "w": gIW, "h": gIW, "src": g.get("icon", "")})
+            commands.append({"type": "text", "x": gx + gIW + 4, "y": gy + 2, "w": 90,
+                            "text": g.get("label", ""), "size": 8, "color": "#666",
+                            "bold": False, "align": "left"})
+
     return {"commands": commands, "width": cw, "height": ch, "positions": positions, "architecture": arch}
 
 
@@ -173,7 +227,9 @@ def commands_to_pptx(render_result, output_path):
 
     def rgb(h):
         h = h.lstrip("#")
-        return RGBColor(int(h[:2], 16), int(h[2:4], 16), int(h[4:], 16))
+        if len(h) == 3:
+            h = h[0]*2 + h[1]*2 + h[2]*2
+        return RGBColor(int(h[:2], 16), int(h[2:4], 16), int(h[4:6], 16))
 
     prs = Presentation()
     prs.slide_width = Inches(SLIDE_W)
