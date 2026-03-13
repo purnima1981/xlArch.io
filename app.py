@@ -120,7 +120,7 @@ async def home(request: Request):
     user = get_current_user(request)
     if user:
         return RedirectResponse("/canvas", status_code=303)
-    return RedirectResponse("/login", status_code=303)
+    return templates.TemplateResponse("landing.html", {"request": request})
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
